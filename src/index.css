@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for the task management app */
+@layer base {
+  body {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .task-card {
+    @apply bg-white border-l-4 border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing;
+  }
+  
+  .task-card.dragging {
+    @apply rotate-2 shadow-xl;
+  }
+  
+  .priority-high {
+    @apply border-l-red-500;
+  }
+  
+  .priority-medium {
+    @apply border-l-yellow-500;
+  }
+  
+  .priority-low {
+    @apply border-l-green-500;
+  }
+}
