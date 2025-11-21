@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, AlertCircle, Mail } from 'lucide-react';
-import { isEmailAddress } from '../utils/helpers';
+import { X, AlertCircle } from 'lucide-react';
 
-// Constants
+// Utility function to get a dummy due date (7 days from today)
+const getDummyDueDate = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 7); // 7 days from today
+  return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+};
+
 const DEFAULT_FORM_DATA = {
   title: 'Review quarterly reports',
-  description: 'Analyze Q4 performance metrics and prepare executive summary',
+  description: '',
   priority: 'medium',
-  assignee: 'manager@acmecorp.com',
-  dueDate: ''
+  dueDate: getDummyDueDate()
 };
 
 const PRIORITY_OPTIONS = [
@@ -17,15 +21,12 @@ const PRIORITY_OPTIONS = [
   { value: 'high', label: 'High' }
 ];
 
+// Utility functions
 const validateForm = (formData) => {
   const errors = {};
   
   if (!formData.title.trim()) {
     errors.title = 'Title is required';
-  }
-  
-  if (formData.assignee && !isEmailAddress(formData.assignee)) {
-    errors.assignee = 'Please enter a valid email address';
   }
   
   return errors;
@@ -74,7 +75,14 @@ const Select = ({ value, onChange, options, ...props }) => (
   <select
     value={value}
     onChange={onChange}
-    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer"
+    style={{
+      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
+      backgroundPosition: 'right 0.5rem center',
+      backgroundRepeat: 'no-repeat',
+      backgroundSize: '1.5em 1.5em',
+      paddingRight: '2.5rem'
+    }}
     {...props}
   >
     {options.map(option => (
@@ -94,62 +102,6 @@ const DateInput = ({ value, onChange }) => (
   />
 );
 
-const EmailInput = ({ value, onChange, error }) => {
-  const isValid = value && isEmailAddress(value);
-  const hasError = value && !isValid;
-  
-  return (
-    <div className="relative">
-      <input
-        type="email"
-        value={value}
-        onChange={onChange}
-        className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-          isValid 
-            ? 'border-green-300 bg-green-50' 
-            : hasError
-            ? 'border-red-300 bg-red-50'
-            : 'border-gray-300'
-        }`}
-        placeholder="e.g., john.smith@acmecorp.com"
-        required
-      />
-      {value && (
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-          <Mail 
-            className={`w-4 h-4 ${isValid ? 'text-green-600' : 'text-red-600'}`} 
-            title={isValid ? 'Valid email address' : 'Invalid email address'} 
-          />
-        </div>
-      )}
-    </div>
-  );
-};
-
-const EmailValidationMessage = ({ value, error }) => {
-  if (error) return null;
-  
-  if (value && !isEmailAddress(value)) {
-    return (
-      <p className="text-red-600 text-xs mt-1 flex items-center">
-        <AlertCircle className="w-3 h-3 mr-1" />
-        Please enter a valid email address.
-      </p>
-    );
-  }
-  
-  if (value && isEmailAddress(value)) {
-    return (
-      <p className="text-green-600 text-xs mt-1 flex items-center">
-        <Mail className="w-3 h-3 mr-1" />
-        Valid email! A notification will be sent to this address when the task is created.
-      </p>
-    );
-  }
-  
-  return null;
-};
-
 // Main Component
 const TaskModal = ({ isOpen, onClose, onSubmit, task }) => {
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
@@ -162,7 +114,6 @@ const TaskModal = ({ isOpen, onClose, onSubmit, task }) => {
         title: task.title || '',
         description: task.description || '',
         priority: task.priority || 'medium',
-        assignee: task.assignee || '',
         dueDate: task.dueDate || ''
       });
     } else {
@@ -257,16 +208,6 @@ const TaskModal = ({ isOpen, onClose, onSubmit, task }) => {
               />
             </FormField>
           </div>
-
-          {/* Assignee Email */}
-          <FormField label="Assignee Email" error={errors.assignee}>
-            <EmailInput
-              value={formData.assignee}
-              onChange={handleInputChange('assignee')}
-              error={errors.assignee}
-            />
-            <EmailValidationMessage value={formData.assignee} error={errors.assignee} />
-          </FormField>
 
           {/* Actions */}
           <div className="flex justify-end space-x-3 pt-4">

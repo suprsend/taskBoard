@@ -1,10 +1,6 @@
 import { useCallback } from 'react';
-import { useSuprSendClient as useSuprSendClientHook } from '@suprsend/react';
-import logger from '../utils/logger';
-import { isEmailAddress, extractNameFromEmail } from '../utils/helpers';
+import { useSuprSendClient as useSuprSendClientHook, PreferenceOptions } from '@suprsend/react';
 
-// Get current user info from context or fallback
-// Note: This should ideally come from a React context, but kept for backward compatibility
 const getCurrentUserInfo = () => {
   const userEmail = window.currentUserEmail || 'user@example.com';
   const userName = window.currentUserName || 'User';
@@ -16,78 +12,179 @@ const getCurrentUserInfo = () => {
   };
 };
 
-const createRecipient = (assigneeEmail, currentUserInfo) => ({
-  is_transient: true,
-  distinct_id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-  $email: [assigneeEmail],
-  $channels: ["email"],
-  name: extractNameFromEmail(assigneeEmail),
-  assignee_email: assigneeEmail,
-  assigned_by: currentUserInfo.name,
-  task_assignee: true
-});
-
-const triggerWorkflow = async (workflowName, recipients, data = {}) => {
+const triggerWorkflow = async (workflowSlug, userEmail, distinctId, userName, eventData) => {
   const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
   if (!apiKey) {
-    throw new Error('REACT_APP_SUPRSEND_API_KEY environment variable is required');
+    throw new Error('REACT_APP_SUPRSEND_API_KEY is not configured');
   }
   
   const workflowPayload = {
-    workflow: workflowName,
-    actor: {
-      distinct_id: getCurrentUserInfo().distinctId,
-      name: getCurrentUserInfo().name,
-      $skip_create: true
-    },
-    recipients: recipients,
-    data: data
+    workflow: workflowSlug,
+    recipients: [
+      {
+        distinct_id: distinctId,
+        $email: [userEmail],
+        name: userName,
+        $channels: ['email', 'inbox'],
+        $skip_create: false
+      }
+    ],
+    data: eventData
   };
   
-  const response = await fetch('https://hub.suprsend.com/trigger/', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'accept': 'application/json'
-    },
-    body: JSON.stringify(workflowPayload)
-  });
+  try {
+    const response = await fetch('https://hub.suprsend.com/trigger/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      mode: 'cors',
+      credentials: 'omit',
+      body: JSON.stringify(workflowPayload)
+    });
   
-  const responseData = await response.json();
+    const responseText = await response.text();
   
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${responseData.message || response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Workflow trigger failed: ${response.status} - ${responseText}`);
+    }
+    
+    return responseText ? JSON.parse(responseText) : { success: true };
+  } catch (error) {
+    console.error('Failed to trigger workflow:', error);
+    throw new Error(`Failed to trigger workflow: ${error.message}`);
   }
-  
-  return responseData;
 };
 
 export const useSuprSendClient = () => {
   const suprSendClient = useSuprSendClientHook();
 
-  const trackTaskStatusChange = useCallback(async (taskTitle, oldStatus, newStatus, taskId, assigneeEmail = null) => {
+  const checkTaskNotificationPreference = useCallback(async () => {
+    if (!suprSendClient) {
+      return true;
+    }
+    
+    try {
+      const resp = await suprSendClient.user.preferences.getPreferences();
+      
+      if (resp.status === "error") {
+        return true;
+      }
+      
+      const preferences = resp.body;
+      const sections = preferences?.sections || [];
+      
+      let foundTaskCategory = false;
+      let taskCategoryPreference = null;
+      
+      for (const section of sections) {
+        if (!section?.subcategories) continue;
+        
+        for (const subcategory of section.subcategories) {
+          const categoryName = (subcategory.category || '').toLowerCase();
+          const subcategoryName = (subcategory.name || '').toLowerCase();
+          
+          const isTaskRelated = 
+            categoryName.includes('task') || 
+            categoryName.includes('task_created') ||
+            categoryName.includes('task-updates') ||
+            categoryName.includes('task_updates') ||
+            categoryName.includes('task_update') ||
+            categoryName.includes('task_status') ||
+            categoryName.includes('task-assignments') ||
+            categoryName === 'task' ||
+            categoryName === 'task-updates' ||
+            subcategoryName.includes('task') ||
+            subcategoryName.includes('update');
+          
+          if (isTaskRelated) {
+            foundTaskCategory = true;
+            taskCategoryPreference = subcategory.preference;
+            
+            const preference = String(subcategory.preference || '').toLowerCase();
+            const isOptOut = preference === 'opt_out' || preference === String(PreferenceOptions.OPT_OUT || '').toLowerCase();
+            const isOptIn = preference === 'opt_in' || preference === String(PreferenceOptions.OPT_IN || '').toLowerCase();
+            
+            if (isOptOut) {
+              return false;
+            }
+            
+            if (isOptIn) {
+              return true;
+            }
+            
+            if (subcategory.channels && subcategory.channels.length > 0) {
+              const allChannelsOptedOut = subcategory.channels.every(channel => {
+                const channelPref = String(channel.preference || '').toLowerCase();
+                return channelPref === 'opt_out' || channelPref === String(PreferenceOptions.OPT_OUT || '').toLowerCase();
+              });
+              
+              if (allChannelsOptedOut) {
+                return false;
+              }
+            }
+          }
+        }
+      }
+      
+      if (foundTaskCategory) {
+        const pref = String(taskCategoryPreference || '').toLowerCase();
+        if (pref === 'opt_in' || pref === String(PreferenceOptions.OPT_IN || '').toLowerCase()) {
+          return true;
+        } else if (pref === 'opt_out' || pref === String(PreferenceOptions.OPT_OUT || '').toLowerCase()) {
+          return false;
+        } else {
+          return true;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error checking task notification preferences:', error);
+      return true;
+    }
+  }, [suprSendClient]);
+
+  const trackTaskStatusChange = useCallback(async (taskTitle, oldStatus, newStatus, taskId) => {
     if (!suprSendClient) return;
     
     try {
-      await suprSendClient.track('TASK_STATUS_CHANGED', {
+      const shouldSendNotification = await checkTaskNotificationPreference();
+      if (!shouldSendNotification) return;
+      
+      const userInfo = getCurrentUserInfo();
+      const eventData = {
         task_title: taskTitle,
         old_status: oldStatus,
         new_status: newStatus,
         task_id: taskId,
-        user_name: 'User',
+        user_name: userInfo.name,
         timestamp: new Date().toISOString()
-      });
+      };
+      
+      const workflowSlug = process.env.REACT_APP_TASK_STATUS_WORKFLOW_SLUG || 'task_status_changed';
+      await triggerWorkflow(
+        workflowSlug,
+        userInfo.email,
+        userInfo.distinctId,
+        userInfo.name,
+        eventData
+      );
     } catch (error) {
-      logger.error('Failed to track task status change:', error);
+      console.error('Failed to track task status change:', error);
     }
-  }, [suprSendClient]);
+  }, [suprSendClient, checkTaskNotificationPreference]);
 
   const trackTaskCreated = useCallback(async (taskData) => {
     if (!suprSendClient) return;
     
     try {
-      // Send in-app notification (inbox) when task is created
+      const shouldSendNotification = await checkTaskNotificationPreference();
+      if (!shouldSendNotification) return;
+      
+      const userInfo = getCurrentUserInfo();
       const eventProperties = {
         task_title: taskData.title,
         task_id: taskData.id,
@@ -95,47 +192,26 @@ export const useSuprSendClient = () => {
         task_description: taskData.description || '',
         task_due_date: taskData.dueDate || '',
         task_status: taskData.status,
-        user_name: 'User',
+        user_name: userInfo.name,
         timestamp: new Date().toISOString()
       };
 
-      await suprSendClient.track('TASK_CREATED', eventProperties);
-
-      // Send email notification to external assignee if applicable
-      if (taskData.assignee && isEmailAddress(taskData.assignee)) {
-        const currentUser = getCurrentUserInfo();
-        
-        if (taskData.assignee !== currentUser.email) {
-          const recipient = createRecipient(taskData.assignee, currentUser);
-          const assigneeName = extractNameFromEmail(taskData.assignee);
-          
-          try {
-            await triggerWorkflow('task_assigned_email', [recipient], {
-              task_title: taskData.title,
-              task_id: taskData.id,
-              task_priority: taskData.priority,
-              task_description: taskData.description || '',
-              task_due_date: taskData.dueDate || '',
-              assignee_email: taskData.assignee,
-              assignee_name: assigneeName,
-              assigned_by: currentUser.name,
-              task_status: taskData.status
-            });
-          } catch (workflowError) {
-            logger.error('Email workflow failed:', workflowError);
-          }
-        }
-      }
+      const workflowSlug = process.env.REACT_APP_TASK_CREATED_WORKFLOW_SLUG || 'task_created';
+      await triggerWorkflow(
+        workflowSlug,
+        userInfo.email,
+        userInfo.distinctId,
+        userInfo.name,
+        eventProperties
+      );
     } catch (error) {
-      logger.error('Failed to trigger task creation notifications:', error);
+      console.error('Failed to track task creation:', error);
     }
-  }, [suprSendClient]);
+  }, [suprSendClient, checkTaskNotificationPreference]);
 
   return {
     suprSendClient,
     trackTaskStatusChange,
-    trackTaskCreated,
-    triggerWorkflow,
-    createRecipient
+    trackTaskCreated
   };
 };

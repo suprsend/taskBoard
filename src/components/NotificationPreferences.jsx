@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Switch from "react-switch";
 import {
   ChannelLevelPreferenceOptions,
@@ -7,277 +7,290 @@ import {
   useAuthenticateUser,
 } from "@suprsend/react";
 import toast from "react-hot-toast";
-import "../styles/NotificationPreferences.css";
-import logger from "../utils/logger";
 
-// Utility functions
-const updateCategoryPreference = async (suprSendClient, category, preference) => {
+// -------------- Category Level Preferences -------------- //
+
+const handleCategoryPreferenceChange = async ({
+  data,
+  subcategory,
+  setPreferenceData,
+  suprSendClient,
+}) => {
   const resp = await suprSendClient.user.preferences.updateCategoryPreference(
-    category,
-    preference
+    subcategory.category,
+    data ? PreferenceOptions.OPT_IN : PreferenceOptions.OPT_OUT
   );
-  
   if (resp.status === "error") {
-    throw new Error(resp.error.message);
+    toast.error(`Failed to update ${subcategory.name} preference: ${resp.error.message}`);
+  } else {
+    setPreferenceData({ ...resp.body });
+    toast.success(`${subcategory.name} preference updated successfully`);
   }
-  
-  return resp.body;
 };
 
-const updateChannelPreferenceInCategory = async (suprSendClient, channel, preference, category) => {
-  const resp = await suprSendClient.user.preferences.updateChannelPreferenceInCategory(
+const handleChannelPreferenceInCategoryChange = async ({
     channel,
-    preference,
-    category
-  );
-  
+  subcategory,
+  setPreferenceData,
+  suprSendClient,
+}) => {
+  if (!channel.is_editable) return;
+
+  const resp =
+    await suprSendClient.user.preferences.updateChannelPreferenceInCategory(
+      channel.channel,
+      channel.preference === PreferenceOptions.OPT_IN
+        ? PreferenceOptions.OPT_OUT
+        : PreferenceOptions.OPT_IN,
+      subcategory.category
+    );
   if (resp.status === "error") {
-    throw new Error(resp.error.message);
+    toast.error(`Failed to update ${channel.channel} preference: ${resp.error.message}`);
+  } else {
+    setPreferenceData({ ...resp.body });
+    toast.success(`${channel.channel} preference updated successfully`);
   }
-  
-  return resp.body;
 };
 
-const updateOverallChannelPreference = async (suprSendClient, channel, status) => {
-  const resp = await suprSendClient.user.preferences.updateOverallChannelPreference(
-    channel,
-    status
-  );
-  
-  if (resp.status === "error") {
-    throw new Error(resp.error.message);
-  }
-  
-  return resp.body;
-};
-
-// Custom Checkbox Component
-const Checkbox = ({ title, value, onClick, disabled }) => {
-  const selected = value === PreferenceOptions.OPT_IN;
-
-  const handleKeyDown = useCallback((e) => {
-    if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      onClick();
-    }
-  }, [disabled, onClick]);
-
-  return (
-    <div
-      role="checkbox"
-      aria-checked={selected}
-      aria-disabled={disabled}
-      aria-label={`${title} notifications`}
-      tabIndex={disabled ? -1 : 0}
-      className="checkbox-container"
-      onClick={disabled ? undefined : onClick}
-      onKeyDown={handleKeyDown}
-    >
-      <Circle selected={selected} disabled={disabled} />
-      <span className="checkbox-label">{title}</span>
-    </div>
-  );
-};
-
-const Circle = ({ selected, disabled }) => {
-  const bgColor = selected
-    ? disabled ? "#BDCFF8" : "#2463EB"
-    : disabled ? "#D0CFCF" : "#FFF";
-
-  return (
-    <div
-      className="checkbox-circle"
-      style={{ backgroundColor: bgColor }}
-    />
-  );
-};
-
-// Category Preferences Component
-const NotificationCategoryPreferences = ({ preferenceData, setPreferenceData }) => {
+function NotificationCategoryPreferences({
+  preferenceData,
+  setPreferenceData,
+}) {
   const suprSendClient = useSuprSendClient();
   const [loading, setLoading] = useState(false);
 
-  const handleCategoryChange = useCallback(async (data, subcategory) => {
-    try {
-      setLoading(true);
-      const preference = data ? PreferenceOptions.OPT_IN : PreferenceOptions.OPT_OUT;
-      const updatedData = await updateCategoryPreference(
-        suprSendClient,
-        subcategory.category,
-        preference
-      );
-      setPreferenceData(updatedData);
-      toast.success(`${subcategory.name} preference updated successfully`);
-    } catch (error) {
-      logger.error('Failed to update category preference:', error);
-      toast.error(`Failed to update ${subcategory.name} preference: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [suprSendClient, setPreferenceData]);
-
-  const handleChannelChange = useCallback(async (channel, subcategory) => {
-    if (!channel.is_editable) return;
-
-    try {
-      setLoading(true);
-      const newPreference = channel.preference === PreferenceOptions.OPT_IN
-        ? PreferenceOptions.OPT_OUT
-        : PreferenceOptions.OPT_IN;
+  // Filter out task assignment related sections and subcategories
+  const filteredSections = preferenceData?.sections?.map(section => {
+    if (!section) return section;
+    
+    // Filter out task assignment related subcategories
+    const filteredSubcategories = section.subcategories?.filter(subcategory => {
+      if (!subcategory) return false;
       
-      const updatedData = await updateChannelPreferenceInCategory(
-        suprSendClient,
-        channel.channel,
-        newPreference,
-        subcategory.category
-      );
-      setPreferenceData(updatedData);
-      toast.success(`${channel.channel} preference updated successfully`);
-    } catch (error) {
-      logger.error('Failed to update channel preference:', error);
-      toast.error(`Failed to update ${channel.channel} preference: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [suprSendClient, setPreferenceData]);
+      const categoryName = (subcategory.category || '').toLowerCase();
+      const subcategoryName = (subcategory.name || '').toLowerCase();
+      const description = (subcategory.description || '').toLowerCase();
+      
+      // Check if it's related to task assignment
+      const isTaskAssignment = 
+        (categoryName.includes('task') && categoryName.includes('assign')) ||
+        categoryName.includes('assignment') ||
+        (subcategoryName.includes('task') && subcategoryName.includes('assign')) ||
+        subcategoryName.includes('assignment') ||
+        (description.includes('task') && description.includes('assign')) ||
+        description.includes('assignment');
+      
+      return !isTaskAssignment;
+    });
+    
+    return {
+      ...section,
+      subcategories: filteredSubcategories
+    };
+  }).filter(section => {
+    // Remove sections that have no subcategories after filtering
+    return section?.subcategories?.length > 0;
+  }) || [];
 
-  const sections = useMemo(() => {
-    return preferenceData?.sections || [];
-  }, [preferenceData?.sections]);
-
-  if (!sections.length) return null;
+  if (!filteredSections.length) return null;
 
   return (
-    <>
-      {sections.map((section, index) => (
-        <div key={index} className="section-container">
+    <div className="space-y-6">
+      {filteredSections.map((section, index) => {
+        return (
+          <div key={index} className="bg-white rounded-lg shadow-sm border p-6">
           {section?.name && (
-            <div className="section-header">
-              <h3 className="section-title">{section.name}</h3>
-              <p className="section-description">{section.description}</p>
+              <div className="mb-6 pb-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                  {section.name}
+                </h3>
+                {section.description && (
+                  <p className="text-sm text-gray-600">{section.description}</p>
+                )}
             </div>
           )}
 
-          {section?.subcategories?.map((subcategory, subIndex) => (
-            <div key={subIndex} className="subcategory-container">
-              <div className="subcategory-header">
-                <div>
-                  <h4 className="subcategory-title">{subcategory.name}</h4>
-                  <p 
-                    id={`${subcategory.category}-description`}
-                    className="subcategory-description"
+            <div className="space-y-6">
+              {section?.subcategories?.map((subcategory, subIndex) => {
+                return (
+                  <div
+                    key={subIndex}
+                    className="pb-6 border-b border-gray-100 last:border-b-0 last:pb-0"
                   >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <h4 className="text-base font-semibold text-gray-900 mb-1">
+                          {subcategory.name}
+                        </h4>
+                        {subcategory.description && (
+                          <p className="text-sm text-gray-600">
                     {subcategory.description}
                   </p>
+                        )}
                 </div>
                 <Switch
                   disabled={!subcategory.is_editable || loading}
-                  onChange={(data) => handleCategoryChange(data, subcategory)}
+                        onChange={(data) => {
+                          setLoading(true);
+                          handleCategoryPreferenceChange({
+                            data,
+                            subcategory,
+                            setPreferenceData,
+                            suprSendClient,
+                          }).finally(() => setLoading(false));
+                        }}
                   uncheckedIcon={false}
                   checkedIcon={false}
                   height={20}
                   width={40}
                   onColor="#2563EB"
                   checked={subcategory.preference === PreferenceOptions.OPT_IN}
-                  aria-label={`Toggle ${subcategory.name} notifications`}
-                  aria-describedby={`${subcategory.category}-description`}
+                        className="ml-4"
                 />
               </div>
 
-              <div className="channels-container">
-                {subcategory?.channels?.map((channel, channelIndex) => (
+                    {subcategory?.channels && subcategory.channels.length > 0 && (
+                      <div className="flex flex-wrap gap-3 mt-4">
+                        {subcategory.channels.map((channel, channelIndex) => {
+                          return (
                   <Checkbox
                     key={channelIndex}
                     value={channel.preference}
                     title={channel.channel}
                     disabled={!channel.is_editable || loading}
-                    onClick={() => handleChannelChange(channel, subcategory)}
-                  />
-                ))}
+                              onClick={() => {
+                                setLoading(true);
+                                handleChannelPreferenceInCategoryChange({
+                                  channel,
+                                  subcategory,
+                                  setPreferenceData,
+                                  suprSendClient,
+                                }).finally(() => setLoading(false));
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
               </div>
+                );
+              })}
             </div>
-          ))}
+          </div>
+        );
+      })}
         </div>
-      ))}
-    </>
   );
+}
+
+// -------------- Channel Level Preferences -------------- //
+
+const handleOverallChannelPreferenceChange = async ({
+  channel,
+  status,
+  setPreferenceData,
+  suprSendClient,
+}) => {
+  const resp =
+    await suprSendClient.user.preferences.updateOverallChannelPreference(
+      channel.channel,
+      status
+    );
+  if (resp.status === "error") {
+    toast.error(`Failed to update ${channel.channel} preference: ${resp.error.message}`);
+  } else {
+    setPreferenceData({ ...resp.body });
+    toast.success(`${channel.channel} preference updated successfully`);
+  }
 };
 
-// Channel Level Preference Item Component
-const ChannelLevelPreferenceItem = ({ channel, setPreferenceData }) => {
+function ChannelLevelPreferenceItem({ channel, setPreferenceData }) {
   const suprSendClient = useSuprSendClient();
   const [isActive, setIsActive] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handlePreferenceChange = useCallback(async (status) => {
-    try {
-      setLoading(true);
-      const updatedData = await updateOverallChannelPreference(
-        suprSendClient,
-        channel.channel,
-        status
-      );
-      setPreferenceData(updatedData);
-      toast.success(`${channel.channel} preference updated successfully`);
-    } catch (error) {
-      logger.error('Failed to update overall channel preference:', error);
-      toast.error(`Failed to update ${channel.channel} preference: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [suprSendClient, channel.channel, setPreferenceData]);
-
-  const toggleActive = useCallback(() => {
-    setIsActive(prev => !prev);
-  }, []);
-
   return (
-    <div className="channel-preference-item">
-      <div className="channel-preference-header" onClick={toggleActive}>
-        <h3 className="channel-title">{channel.channel}</h3>
-        <p className="channel-description">
+    <div className="bg-white rounded-lg shadow-sm border p-6 mb-4">
+      <div
+        className="cursor-pointer"
+        onClick={() => setIsActive(!isActive)}
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          {channel.channel}
+        </h3>
+        <p className="text-sm text-gray-600">
           {channel.is_restricted
             ? "Allow required notifications only"
             : "Allow all notifications"}
         </p>
       </div>
-      
       {isActive && (
-        <div className="channel-preference-options">
-          <h4 className="options-title">{channel.channel} Preferences</h4>
-          
-          <div className="radio-options">
-            <div className="radio-option">
-              <div className="radio-input-group">
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <h4 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
+            {channel.channel} Preferences
+          </h4>
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center mb-2">
                 <input
                   type="radio"
                   name={`all-${channel.channel}`}
+                  value={true}
                   id={`all-${channel.channel}`}
                   checked={!channel.is_restricted}
                   disabled={loading}
-                  onChange={() => handlePreferenceChange(ChannelLevelPreferenceOptions.ALL)}
+                  onChange={() => {
+                    setLoading(true);
+                    handleOverallChannelPreferenceChange({
+                      channel,
+                      status: ChannelLevelPreferenceOptions.ALL,
+                      setPreferenceData,
+                      suprSendClient,
+                    }).finally(() => setLoading(false));
+                  }}
+                  className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
-                <label htmlFor={`all-${channel.channel}`}>All</label>
+                <label
+                  htmlFor={`all-${channel.channel}`}
+                  className="ml-3 text-sm font-medium text-gray-900"
+                >
+                  All
+                </label>
               </div>
-              <p className="radio-description">
+              <p className="text-sm text-gray-600 ml-7">
                 Allow All Notifications, except the ones that I have turned off
               </p>
             </div>
-            
-            <div className="radio-option">
-              <div className="radio-input-group">
+            <div>
+              <div className="flex items-center mb-2">
                 <input
                   type="radio"
                   name={`required-${channel.channel}`}
+                  value={true}
                   id={`required-${channel.channel}`}
                   checked={channel.is_restricted}
                   disabled={loading}
-                  onChange={() => handlePreferenceChange(ChannelLevelPreferenceOptions.REQUIRED)}
+                  onChange={() => {
+                    setLoading(true);
+                    handleOverallChannelPreferenceChange({
+                      channel,
+                      status: ChannelLevelPreferenceOptions.REQUIRED,
+                      setPreferenceData,
+                      suprSendClient,
+                    }).finally(() => setLoading(false));
+                  }}
+                  className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
-                <label htmlFor={`required-${channel.channel}`}>Required</label>
+                <label
+                  htmlFor={`required-${channel.channel}`}
+                  className="ml-3 text-sm font-medium text-gray-900"
+                >
+                  Required
+                </label>
               </div>
-              <p className="radio-description">
-                Allow only important notifications related to account and security settings
+              <p className="text-sm text-gray-600 ml-7">
+                Allow only important notifications related to account and
+                security settings
               </p>
             </div>
           </div>
@@ -285,158 +298,137 @@ const ChannelLevelPreferenceItem = ({ channel, setPreferenceData }) => {
       )}
     </div>
   );
-};
+}
 
-// Channel Level Preferences Component
-const ChannelLevelPreferences = ({ preferenceData, setPreferenceData }) => {
-  const channels = useMemo(() => {
-    return preferenceData?.channel_preferences || [];
-  }, [preferenceData?.channel_preferences]);
+function ChannelLevelPreferences({ preferenceData, setPreferenceData }) {
+  const channels = preferenceData?.channel_preferences || [];
+
+  if (!channels.length) {
+  return (
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        <p className="text-gray-500 text-center py-8">No channel preferences available</p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div className="section-header">
-        <h3 className="section-title">What notifications to allow for channel?</h3>
-      </div>
-      
-      <div>
-        {channels.length > 0 ? (
-          channels.map((channel, index) => (
+    <div className="space-y-4">
+      {channels.map((channel, index) => {
+        return (
             <ChannelLevelPreferenceItem
               key={index}
               channel={channel}
               setPreferenceData={setPreferenceData}
             />
-          ))
-        ) : (
-          <p className="no-data-message">No channel preferences available</p>
-        )}
-      </div>
+        );
+      })}
     </div>
   );
-};
+}
 
-// Loading Component
-const LoadingState = () => (
-  <div className="notification-preferences-container">
-    <div className="preferences-header">
-      <div className="header-content">
-        <div className="header-inner">
-          <div>
-            <h1 className="preferences-title">Notification Preferences</h1>
-            <p className="preferences-subtitle">Loading your preferences...</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div className="preferences-content">
-      <div className="preferences-card">
-        <div className="loading-container">
-          <div className="spinner" />
-          <p className="loading-text">Loading preferences...</p>
-        </div>
-      </div>
-    </div>
+// -------------- Custom Checkbox Component -------------- //
+
+function Checkbox({ title, value, onClick, disabled }) {
+  const selected = value === PreferenceOptions.OPT_IN;
+
+  return (
+    <div
+      className={`
+        inline-flex items-center px-3 py-1.5 rounded-full border transition-colors
+        ${selected 
+          ? 'border-blue-500 bg-blue-50' 
+          : 'border-gray-300 bg-white hover:border-gray-400'
+        }
+        ${disabled 
+          ? 'opacity-60 cursor-not-allowed' 
+          : 'cursor-pointer'
+        }
+      `}
+      onClick={disabled ? undefined : onClick}
+    >
+      <Circle selected={selected} disabled={disabled} />
+      <span className={`ml-2 text-sm font-medium ${
+        selected ? 'text-blue-700' : 'text-gray-700'
+      }`}>
+        {title}
+      </span>
   </div>
 );
+}
 
-// Error Component
-const ErrorState = ({ error, onRetry }) => (
-  <div className="notification-preferences-container">
-    <div className="preferences-header">
-      <div className="header-content">
-        <div className="header-inner">
-          <div>
-            <h1 className="preferences-title">Notification Preferences</h1>
-            <p className="preferences-subtitle">Error loading preferences</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div className="preferences-content">
-      <div className="preferences-card">
-        <div className="error-container">
-          <div className="error-icon">
-            <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
-          <p className="error-message">{error}</p>
-          <button onClick={onRetry} className="retry-button">
-            Retry
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+function Circle({ selected, disabled }) {
+  const bgColor = selected
+    ? disabled
+      ? "#BDCFF8"
+      : "#2463EB"
+    : disabled
+    ? "#D0CFCF"
+    : "#FFF";
 
-// Empty State Component
-const EmptyState = () => (
-  <div className="notification-preferences-container">
-    <div className="preferences-header">
-      <div className="header-content">
-        <div className="header-inner">
-          <div>
-            <h1 className="preferences-title">Notification Preferences</h1>
-            <p className="preferences-subtitle">No preferences available</p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div className="preferences-content">
-      <div className="preferences-card">
-        <div className="empty-container">
-          <p className="empty-message">No notification preferences are currently available.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+  return (
+    <div
+      className="w-5 h-5 rounded-full border border-gray-400 flex-shrink-0"
+      style={{ backgroundColor: bgColor }}
+    />
+  );
+}
 
-// Main Component
-const NotificationPreferences = () => {
+// -------------- Main Component -------------- //
+
+function NotificationPreferences() {
   const suprSendClient = useSuprSendClient();
   const { authenticatedUser } = useAuthenticateUser();
   const [preferenceData, setPreferenceData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const loadPreferences = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const resp = await suprSendClient.user.preferences.getPreferences();
-      
-      if (resp.status === "error") {
-        throw new Error(resp.error.message);
-      }
-      
-      setPreferenceData(resp.body);
-    } catch (error) {
-      logger.error('Failed to load preferences:', error);
-      setError(error.message);
-      toast.error('Failed to load notification preferences');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [suprSendClient]);
-
-  const handleRetry = useCallback(() => {
-    window.location.reload();
-  }, []);
-
   useEffect(() => {
     if (!authenticatedUser || !suprSendClient) return;
 
-    loadPreferences();
+    // Load preferences
+    suprSendClient.user.preferences.getPreferences().then(async (resp) => {
+      if (resp.status === "error") {
+        setError(resp.error.message);
+        toast.error('Failed to load notification preferences');
+      } else {
+        // Check if email channel is missing from channel_preferences
+        const channels = resp.body?.channel_preferences || [];
+        const hasEmail = channels.some(ch => ch.channel === 'email');
+        const hasInbox = channels.some(ch => ch.channel === 'inbox');
+        
+        // If email is missing but inbox exists, try to add email channel
+        if (!hasEmail && hasInbox) {
+          try {
+            await suprSendClient.user.preferences.updateOverallChannelPreference(
+              'email',
+              ChannelLevelPreferenceOptions.ALL
+            );
+            
+            // Reload preferences after adding email
+            const updatedResp = await suprSendClient.user.preferences.getPreferences();
+            if (updatedResp.status !== 'error') {
+              setPreferenceData({ ...updatedResp.body });
+              setIsLoading(false);
+              return;
+            }
+          } catch (emailError) {
+            // Silent fail
+          }
+        }
+        
+        setPreferenceData({ ...resp.body });
+      }
+      setIsLoading(false);
+    });
 
+    // Listen for update in preferences data
     const handlePreferencesUpdated = (preferenceData) => {
-      setPreferenceData(preferenceData.body);
+      setPreferenceData({ ...preferenceData.body });
     };
 
+    // Listen for errors
     const handlePreferencesError = (response) => {
-      logger.error('Preferences error:', response?.error?.message);
+      // Silent fail
     };
 
     suprSendClient.emitter.on("preferences_updated", handlePreferencesUpdated);
@@ -448,54 +440,131 @@ const NotificationPreferences = () => {
         suprSendClient.emitter.off("preferences_error", handlePreferencesError);
       }
     };
-  }, [authenticatedUser, suprSendClient, loadPreferences]);
+  }, [authenticatedUser, suprSendClient]);
 
-  if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState error={error} onRetry={handleRetry} />;
-  if (!preferenceData) return <EmptyState />;
-  
-  return (
-    <div className="notification-preferences-container">
-      <div className="preferences-header">
-        <div className="header-content">
-          <div className="header-inner">
-            <div>
-              <h1 className="preferences-title">Notification Preferences</h1>
-              <p className="preferences-subtitle">Manage your notification settings</p>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white shadow-sm border-b">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
+              <p className="text-gray-600">Loading your preferences...</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="bg-white rounded-lg shadow-sm border p-8">
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="mt-4 text-gray-600">Loading preferences...</p>
+              </div>
             </div>
           </div>
         </div>
       </div>
+    );
+  }
 
-      <div className="preferences-content">
-        <div className="preferences-card">
-          <div className="card-header">
-            <h2 className="card-title">Category Preferences</h2>
-            <p className="card-description">Choose which types of notifications you want to receive</p>
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white shadow-sm border-b">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
+              <p className="text-gray-600">Error loading preferences</p>
+            </div>
           </div>
-          <div className="card-content">
+        </div>
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="bg-white rounded-lg shadow-sm border p-8">
+              <div className="text-center py-8">
+                <p className="text-red-600 mb-4">Error: {error}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!preferenceData) {
+  return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white shadow-sm border-b">
+          <div className="px-4 sm:px-6 lg:px-8">
+            <div className="py-4">
+              <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
+              <p className="text-gray-600">No preferences available</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="bg-white rounded-lg shadow-sm border p-8">
+              <p className="text-gray-500 text-center py-8">
+                No notification preferences are currently available.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="py-4">
+            <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
+            <p className="text-gray-600">Manage your notification settings</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="space-y-6">
+            {/* Category Preferences Section */}
+            <div>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 mb-1">Category Preferences</h2>
+                <p className="text-sm text-gray-600">Choose which types of notifications you want to receive</p>
+              </div>
             <NotificationCategoryPreferences
               preferenceData={preferenceData}
               setPreferenceData={setPreferenceData}
             />
-          </div>
         </div>
 
-        <div className="preferences-card">
-          <div className="card-header">
-            <h2 className="card-title">Channel Preferences</h2>
-            <p className="card-description">Configure notification delivery channels</p>
+            {/* Channel Preferences Section */}
+            <div>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900 mb-1">Channel Preferences</h2>
+                <p className="text-sm text-gray-600">Configure notification delivery channels</p>
           </div>
-          <div className="card-content">
             <ChannelLevelPreferences
               preferenceData={preferenceData}
               setPreferenceData={setPreferenceData}
             />
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
-};
+}
 
 export default NotificationPreferences;

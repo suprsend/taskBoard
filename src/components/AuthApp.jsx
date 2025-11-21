@@ -1,49 +1,121 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { SuprSendProvider, SuprSendFeedProvider } from '@suprsend/react';
-import SignUpForm from './SignUpForm';
-import SignInForm from './SignInForm';
+import { SuprSendProvider, useSuprSendClient } from '@suprsend/react';
+import UserForm from './UserForm';
 import MainLayout from './MainLayout';
-import ToastNotification from './ToastNotification';
 import { suprsendTools } from '../hooks/useMcpTool';
-import logger from '../utils/logger';
 
-// Constants
-const DEFAULT_WORKSPACE = 'task-management-example-app';
+const DEFAULT_WORKSPACE = process.env.REACT_APP_SUPRSEND_WORKSPACE || 'task-management-example-app';
+
+// Component to set default channel preferences
+const SetDefaultPreferences = ({ distinctId }) => {
+  const suprSendClient = useSuprSendClient();
+  const [hasSetPreferences, setHasSetPreferences] = useState(false);
+
+  useEffect(() => {
+    if (!suprSendClient || !distinctId || hasSetPreferences) return;
+
+    const setDefaultChannelPreferences = async () => {
+      try {
+        const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
+        if (!apiKey) {
+          console.error('REACT_APP_SUPRSEND_API_KEY is not configured');
+          return;
+        }
+        const userEmail = window.currentUserEmail || distinctId;
+        
+        // Ensure email is properly set in user profile
+        if (userEmail && userEmail !== distinctId) {
+          try {
+            const updateUserUrl = `https://hub.suprsend.com/v1/user/${encodeURIComponent(distinctId)}/`;
+            await fetch(updateUserUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              mode: 'cors',
+              credentials: 'omit',
+              body: JSON.stringify({
+                $email: [userEmail]
+              })
+            });
+          } catch (userError) {
+            // Silent fail
+          }
+        }
+        
+        // Wait for profile to sync
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Set channel preferences
+        const prefUrl = `https://hub.suprsend.com/v1/user/${encodeURIComponent(distinctId)}/preference/channel_preference/`;
+        
+        const response = await fetch(prefUrl, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          mode: 'cors',
+          credentials: 'omit',
+          body: JSON.stringify({
+            channel_preferences: [
+              {
+                channel: 'email',
+                is_restricted: false
+              },
+              {
+                channel: 'inbox',
+                is_restricted: false
+              }
+            ]
+          })
+        });
+
+        if (response.ok && suprSendClient?.emitter) {
+          setTimeout(async () => {
+            try {
+              const resp = await suprSendClient.user.preferences.getPreferences();
+              if (resp.status !== 'error' && resp.body) {
+                suprSendClient.emitter.emit('preferences_updated', { body: resp.body });
+              }
+            } catch (e) {
+              // Silent fail
+            }
+          }, 1000);
+        }
+        
+        setHasSetPreferences(true);
+      } catch (error) {
+        console.error('Error setting default preferences:', error);
+      }
+    };
+
+    // Small delay to ensure user is fully initialized
+    const timer = setTimeout(() => {
+      setDefaultChannelPreferences();
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [suprSendClient, distinctId, hasSetPreferences]);
+
+  return null;
+};
 
 // Main Authentication App Component
 const AuthApp = () => {
-  const [currentView, setCurrentView] = useState('signin');
   const [currentUser, setCurrentUser] = useState(null);
   const workspace = process.env.REACT_APP_SUPRSEND_WORKSPACE || DEFAULT_WORKSPACE;
 
-  // Initialize window.suprsend if not available
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.suprsend) {
-      window.suprsend = {
-        identify: (distinctId) => Promise.resolve(),
-        reset: () => Promise.resolve()
-      };
-    }
-  }, []);
-
-  // Authentication handlers
-  const handleSignUpSuccess = useCallback(async (userResult, distinctId) => {
+  // Handle user creation/authentication success
+  const handleUserSuccess = useCallback(async (userResult, distinctId) => {
     try {
       await suprsendTools.identifyUser(distinctId);
-      setCurrentUser({
-        distinctId,
-        profile: userResult
-      });
     } catch (error) {
-      logger.error('Error identifying user after signup:', error);
-      setCurrentUser({
-        distinctId,
-        profile: userResult
-      });
+      // Silent fail
     }
-  }, []);
-
-  const handleSignInSuccess = useCallback((userResult, distinctId) => {
     setCurrentUser({
       distinctId,
       profile: userResult
@@ -55,27 +127,24 @@ const AuthApp = () => {
       window.suprsend.reset();
     }
     setCurrentUser(null);
-    setCurrentView('signin');
   }, []);
 
-  const handleViewChange = useCallback((view) => {
-    setCurrentView(view);
-  }, []);
+  // Set user context for notification tracking
+  useEffect(() => {
+    if (currentUser) {
+      const userEmail = currentUser.profile?.$email?.[0]?.value || currentUser.distinctId;
+      const userName = currentUser.profile?.properties?.name || 'User';
+      window.currentUserEmail = userEmail;
+      window.currentUserName = userName;
+    }
+  }, [currentUser]);
 
   // Render authenticated app
   if (currentUser) {
     const publicApiKey = process.env.REACT_APP_SUPRSEND_PUBLIC_KEY;
     if (!publicApiKey) {
-      logger.error('REACT_APP_SUPRSEND_PUBLIC_KEY environment variable is required');
-      return (
-        <div className="auth-app">
-          <div className="auth-container">
-            <div className="error-message">
-              Configuration error: REACT_APP_SUPRSEND_PUBLIC_KEY is missing. Please check your environment variables.
-            </div>
-          </div>
-        </div>
-      );
+      console.error('REACT_APP_SUPRSEND_PUBLIC_KEY is not configured');
+      return <div>Configuration error: Missing SuprSend public key</div>;
     }
 
     return (
@@ -83,52 +152,29 @@ const AuthApp = () => {
         publicApiKey={publicApiKey} 
         distinctId={currentUser.distinctId}
       >
-        <SuprSendFeedProvider>
-          <ToastNotification />
-          <MainLayout 
-            user={currentUser} 
-            onSignOut={handleSignOut}
-          />
-        </SuprSendFeedProvider>
+        <SetDefaultPreferences distinctId={currentUser.distinctId} />
+        <MainLayout 
+          user={currentUser} 
+          onSignOut={handleSignOut}
+        />
       </SuprSendProvider>
     );
   }
 
-  // Render authentication forms
+  // Render authentication form
   return (
     <div className="auth-app">
       <div className="auth-container">
         <div className="auth-header">
           <h1>Task Management App</h1>
-        </div>
-        
-        <div className="auth-tabs">
-          <button 
-            className={`tab ${currentView === 'signin' ? 'active' : ''}`}
-            onClick={() => handleViewChange('signin')}
-          >
-            Sign In
-          </button>
-          <button 
-            className={`tab ${currentView === 'signup' ? 'active' : ''}`}
-            onClick={() => handleViewChange('signup')}
-          >
-            Sign Up
-          </button>
+          <p>Enter your email to get started</p>
         </div>
         
         <div className="auth-content">
-          {currentView === 'signin' ? (
-            <SignInForm 
-              onSuccess={handleSignInSuccess}
-              workspace={workspace}
-            />
-          ) : (
-            <SignUpForm 
-              onSuccess={handleSignUpSuccess}
-              workspace={workspace}
-            />
-          )}
+          <UserForm 
+            onSuccess={handleUserSuccess}
+            workspace={workspace}
+          />
         </div>
       </div>
     </div>

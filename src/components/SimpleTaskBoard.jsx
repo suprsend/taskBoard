@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Trash2, Edit3, Calendar, Mail } from 'lucide-react';
-import TaskModal from './TaskModal';
+import { Plus, Trash2, Edit3, Calendar } from 'lucide-react';
 import { Inbox } from '@suprsend/react';
+import TaskModal from './TaskModal';
+import ToastNotification from './ToastNotification';
 import { useSuprSendClient } from '../hooks/useSuprSendClient';
-import logger from '../utils/logger';
-import { cleanMarkdown, getUserInfo } from '../utils/helpers';
 
-// Constants
 const COLUMNS = [
   { id: 'todo', title: 'To Do', color: 'bg-gray-100' },
   { id: 'in-progress', title: 'In Progress', color: 'bg-blue-100' },
@@ -14,19 +12,7 @@ const COLUMNS = [
   { id: 'completed', title: 'Completed', color: 'bg-green-100' }
 ];
 
-const SAMPLE_TASKS = [
-  {
-    id: '1',
-    title: 'Welcome to your task board!',
-    description: 'This is your first task. You can edit, delete, or move it around.',
-    status: 'todo',
-    priority: 'medium',
-    assignee: '',
-    dueDate: ''
-  }
-];
 
-// Utility functions
 const getPriorityColor = (priority) => {
   const colors = {
     high: 'border-l-red-500',
@@ -36,31 +22,14 @@ const getPriorityColor = (priority) => {
   return colors[priority] || 'border-l-gray-500';
 };
 
-// Custom Notification Component
-const CustomNotificationCard = ({ notificationData, markAsRead, userEmail }) => {
-  const avatarLetter = (userEmail || 'U').charAt(0).toUpperCase();
+const getUserInfo = (user) => {
+  const userEmail = user?.profile?.$email?.[0]?.value || 
+                   user?.profile?.properties?.email || 
+                   user?.distinctId || 
+                   'user@example.com';
+  const userName = user?.profile?.properties?.name || 'User';
   
-  const title = cleanMarkdown(notificationData?.message?.header || 'Notification');
-  const message = cleanMarkdown(notificationData?.message?.text || '');
-  const timestamp = notificationData?.created_on 
-    ? new Date(notificationData.created_on * 1000).toLocaleTimeString() 
-    : '';
-
-  return (
-    <div 
-      className="custom-notification-card"
-      onClick={() => markAsRead(notificationData.n_id)}
-    >
-      <div className="notification-avatar">
-        {avatarLetter}
-      </div>
-      <div className="notification-content">
-        <div className="notification-title">{title}</div>
-        <div className="notification-message">{message}</div>
-        <div className="notification-timestamp">{timestamp}</div>
-      </div>
-    </div>
-  );
+  return { userEmail, userName };
 };
 
 // Task Card Component
@@ -87,9 +56,8 @@ const TaskCard = React.memo(({ task, onEdit, onDelete, onDragStart, onDragEnd, i
     title: task.title || 'Untitled Task',
     description: task.description || '',
     priority: task.priority || 'medium',
-    assignee: task.assignee || '',
     dueDate: task.dueDate || '',
-    ...task
+    status: task.status || 'todo'
   };
 
   return (
@@ -97,49 +65,40 @@ const TaskCard = React.memo(({ task, onEdit, onDelete, onDragStart, onDragEnd, i
       draggable
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
-      className={`bg-white border-l-4 ${getPriorityColor(safeTask.priority)} border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing ${
-        isDragging ? 'rotate-2 shadow-xl opacity-50' : 'opacity-100'
+      className={`bg-white rounded-lg shadow-sm border-l-4 ${getPriorityColor(safeTask.priority)} p-4 cursor-move hover:shadow-md transition-shadow ${
+        isDragging ? 'opacity-50' : ''
       }`}
     >
       <div className="flex justify-between items-start mb-2">
-        <h4 className="font-medium text-gray-900 text-sm">{safeTask.title}</h4>
+        <h3 className="font-semibold text-gray-900 text-sm">{safeTask.title}</h3>
         <div className="flex space-x-1">
           <button
             onClick={handleEdit}
-            className="text-gray-400 hover:text-blue-600 p-1"
+            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
             aria-label="Edit task"
           >
-            <Edit3 className="w-3 h-3" />
+            <Edit3 className="w-4 h-4" />
           </button>
           <button
             onClick={handleDelete}
-            className="text-gray-400 hover:text-red-600 p-1"
+            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
             aria-label="Delete task"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
       
       {safeTask.description && (
-        <p className="text-xs text-gray-600 mb-3 line-clamp-2">{safeTask.description}</p>
+        <p className="text-xs text-gray-600 mb-2 line-clamp-2">{safeTask.description}</p>
       )}
       
-      <div className="space-y-2">
-        {safeTask.assignee && (
-          <div className="flex items-center space-x-1 text-xs text-gray-600">
-            <Mail className="w-3 h-3" />
-            <span>{safeTask.assignee}</span>
-          </div>
-        )}
-        
-        {safeTask.dueDate && (
-          <div className="flex items-center space-x-1 text-xs text-gray-600">
-            <Calendar className="w-3 h-3" />
-            <span>{new Date(safeTask.dueDate).toLocaleDateString()}</span>
-          </div>
-        )}
-      </div>
+      {safeTask.dueDate && (
+        <div className="flex items-center space-x-1 text-xs text-gray-500 mt-2">
+          <Calendar className="w-3 h-3" />
+          <span>{new Date(safeTask.dueDate).toLocaleDateString()}</span>
+        </div>
+      )}
     </div>
   );
 });
@@ -153,8 +112,12 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
   const [draggedTask, setDraggedTask] = useState(null);
   const { trackTaskStatusChange, trackTaskCreated } = useSuprSendClient();
 
-  // Get user info for notifications
-  const { userEmail, userName } = useMemo(() => getUserInfo(user), [user]);
+  // Set user context for notifications and workflows
+  useEffect(() => {
+    const { userEmail, userName } = getUserInfo(user);
+    window.currentUserEmail = userEmail;
+    window.currentUserName = userName;
+  }, [user]);
 
   // Load tasks from localStorage
   useEffect(() => {
@@ -169,11 +132,9 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
           const tasks = JSON.parse(savedTasks);
           setTasks(tasks);
         } else {
-          setTasks(SAMPLE_TASKS);
-          localStorage.setItem(userTasksKey, JSON.stringify(SAMPLE_TASKS));
+          setTasks([]);
         }
       } catch (error) {
-        logger.error('Error loading tasks:', error);
         setTasks([]);
       }
     };
@@ -189,7 +150,7 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
       const userTasksKey = `tasks_${user.distinctId}`;
       localStorage.setItem(userTasksKey, JSON.stringify(tasks));
     } catch (error) {
-      logger.error('Error saving tasks:', error);
+      // Silent fail
     }
   }, [tasks, user?.distinctId]);
 
@@ -200,7 +161,6 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
       title: taskData.title || '',
       description: taskData.description || '',
       priority: taskData.priority || 'medium',
-      assignee: taskData.assignee || '',
       dueDate: taskData.dueDate || '',
       status: 'todo'
     };
@@ -210,7 +170,7 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
     try {
       await trackTaskCreated(newTask);
     } catch (error) {
-      logger.error('Failed to track task creation:', error);
+      // Silent fail
     }
   }, [setTasks, trackTaskCreated]);
 
@@ -256,11 +216,10 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
           draggedTask.title,
           oldStatus,
           newStatus,
-          draggedTask.id,
-          draggedTask.assignee
+          draggedTask.id
         );
       } catch (error) {
-        logger.error('Failed to track task status change:', error);
+        // Silent fail
       }
     }
     setDraggedTask(null);
@@ -284,13 +243,14 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
     }
   }, [editingTask, handleUpdateTask, handleCreateTask]);
 
-  // Optimize task filtering - memoize tasks by status to avoid recalculations
-  const tasksByStatus = useMemo(() => {
-    return COLUMNS.reduce((acc, column) => {
-      acc[column.id] = tasks.filter(task => task.status === column.id);
-      return acc;
-    }, {});
+  // Memoized values
+  const getTasksByStatus = useCallback((status) => {
+    return tasks.filter(task => task.status === status);
   }, [tasks]);
+
+  const userName = useMemo(() => {
+    return user?.profile?.properties?.name || 'User';
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -303,12 +263,10 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
               <p className="text-gray-600">Welcome, {userName}!</p>
             </div>
             <div className="flex items-center space-x-4">
-              <Inbox 
-                pageSize={20} 
-                notificationComponent={(props) => (
-                  <CustomNotificationCard {...props} userEmail={userEmail} />
-                )}
-              />
+              {/* Inbox component renders bell, badge, and popover here */}
+              <Inbox pageSize={20} popperPosition="bottom-end">
+                <ToastNotification />
+              </Inbox>
               <button
                 onClick={() => setIsModalOpen(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
@@ -326,42 +284,39 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {COLUMNS.map(column => {
-              const columnTasks = tasksByStatus[column.id] || [];
-              return (
-                <div key={column.id} className="bg-white rounded-lg shadow-sm border">
-                  <div className={`p-4 rounded-t-lg ${column.color}`}>
-                    <h3 className="font-semibold text-gray-900">{column.title}</h3>
-                    <p className="text-sm text-gray-600">
-                      {columnTasks.length} tasks
-                    </p>
-                  </div>
-                  
-                  <div 
-                    className="p-4 space-y-3 min-h-[400px]"
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, column.id)}
-                  >
-                    {columnTasks.map(task => (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        onEdit={setEditingTask}
-                        onDelete={handleDeleteTask}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        isDragging={draggedTask?.id === task.id}
-                      />
-                    ))}
-                    {columnTasks.length === 0 && (
-                      <div className="text-gray-400 text-center py-8">
-                        Drop tasks here
-                      </div>
-                    )}
-                  </div>
+            {COLUMNS.map(column => (
+              <div key={column.id} className="bg-white rounded-lg shadow-sm border">
+                <div className={`p-4 rounded-t-lg ${column.color}`}>
+                  <h3 className="font-semibold text-gray-900">{column.title}</h3>
+                  <p className="text-sm text-gray-600">
+                    {getTasksByStatus(column.id).length} tasks
+                  </p>
                 </div>
-              );
-            })}
+                
+                <div 
+                  className="p-4 space-y-3 min-h-[400px]"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, column.id)}
+                >
+                  {getTasksByStatus(column.id).map(task => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onEdit={setEditingTask}
+                      onDelete={handleDeleteTask}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      isDragging={draggedTask?.id === task.id}
+                    />
+                  ))}
+                  {getTasksByStatus(column.id).length === 0 && (
+                    <div className="text-gray-400 text-center py-8">
+                      Drop tasks here
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
