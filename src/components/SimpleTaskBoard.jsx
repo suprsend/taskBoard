@@ -110,7 +110,7 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
-  const { trackTaskStatusChange, trackTaskCreated } = useSuprSendClient();
+  const { trackTaskStatusChange, trackTaskCreated, trackTaskDeleted } = useSuprSendClient();
 
   // Set user context for notifications and workflows
   useEffect(() => {
@@ -119,40 +119,7 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
     window.currentUserName = userName;
   }, [user]);
 
-  // Load tasks from localStorage
-  useEffect(() => {
-    if (!user?.distinctId) return;
-
-    const loadTasks = () => {
-      try {
-        const userTasksKey = `tasks_${user.distinctId}`;
-        const savedTasks = localStorage.getItem(userTasksKey);
-        
-        if (savedTasks) {
-          const tasks = JSON.parse(savedTasks);
-          setTasks(tasks);
-        } else {
-          setTasks([]);
-        }
-      } catch (error) {
-        setTasks([]);
-      }
-    };
-
-    loadTasks();
-  }, [user?.distinctId, setTasks]);
-
-  // Save tasks to localStorage
-  useEffect(() => {
-    if (!user?.distinctId || tasks.length === 0) return;
-
-    try {
-      const userTasksKey = `tasks_${user.distinctId}`;
-      localStorage.setItem(userTasksKey, JSON.stringify(tasks));
-    } catch (error) {
-      // Silent fail
-    }
-  }, [tasks, user?.distinctId]);
+  // Tasks are now managed in MainLayout, so we don't need to load/save here
 
   // Task handlers
   const handleCreateTask = useCallback(async (taskData) => {
@@ -177,14 +144,29 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
   const handleUpdateTask = useCallback((taskData) => {
     setTasks(prevTasks => 
       prevTasks.map(task => 
-        task.id === taskData.id ? taskData : task
+        task.id === taskData.id 
+          ? { ...task, ...taskData } // Merge to preserve status and other fields
+          : task
       )
     );
   }, [setTasks]);
 
-  const handleDeleteTask = useCallback((taskId) => {
+  const handleDeleteTask = useCallback(async (taskId) => {
+    // Find the task before deleting to track it
+    const taskToDelete = tasks.find(task => task.id === taskId);
+    
+    // Remove task from state
     setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-  }, [setTasks]);
+    
+    // Track deletion if task was found
+    if (taskToDelete) {
+      try {
+        await trackTaskDeleted(taskToDelete);
+      } catch (error) {
+        // Silent fail
+      }
+    }
+  }, [setTasks, tasks, trackTaskDeleted]);
 
   // Drag and drop handlers
   const handleDragStart = useCallback((e, task) => {

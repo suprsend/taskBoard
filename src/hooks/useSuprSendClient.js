@@ -209,9 +209,40 @@ export const useSuprSendClient = () => {
     }
   }, [suprSendClient, checkTaskNotificationPreference]);
 
+  const trackTaskDeleted = useCallback(async (taskData) => {
+    if (!suprSendClient) return;
+    
+    try {
+      const shouldSendNotification = await checkTaskNotificationPreference();
+      if (!shouldSendNotification) return;
+      
+      const userInfo = getCurrentUserInfo();
+      const eventProperties = {
+        task_title: taskData.title,
+        task_id: taskData.id,
+        task_priority: taskData.priority,
+        task_status: taskData.status,
+        user_name: userInfo.name,
+        timestamp: new Date().toISOString()
+      };
+
+      const workflowSlug = process.env.REACT_APP_TASK_DELETED_WORKFLOW_SLUG || 'task_deleted';
+      await triggerWorkflow(
+        workflowSlug,
+        userInfo.email,
+        userInfo.distinctId,
+        userInfo.name,
+        eventProperties
+      );
+    } catch (error) {
+      console.error('Failed to track task deletion:', error);
+    }
+  }, [suprSendClient, checkTaskNotificationPreference]);
+
   return {
     suprSendClient,
     trackTaskStatusChange,
-    trackTaskCreated
+    trackTaskCreated,
+    trackTaskDeleted
   };
 };

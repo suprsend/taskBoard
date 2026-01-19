@@ -107,7 +107,23 @@ const SetDefaultPreferences = ({ distinctId }) => {
 // Main Authentication App Component
 const AuthApp = () => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const workspace = process.env.REACT_APP_SUPRSEND_WORKSPACE || DEFAULT_WORKSPACE;
+
+  // Load user from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedUser = localStorage.getItem('currentUser');
+      if (savedUser) {
+        const userData = JSON.parse(savedUser);
+        setCurrentUser(userData);
+      }
+    } catch (error) {
+      // Silent fail - invalid data in localStorage
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   // Handle user creation/authentication success
   const handleUserSuccess = useCallback(async (userResult, distinctId) => {
@@ -116,18 +132,42 @@ const AuthApp = () => {
     } catch (error) {
       // Silent fail
     }
-    setCurrentUser({
+    const userData = {
       distinctId,
       profile: userResult
-    });
+    };
+    setCurrentUser(userData);
+    // Persist user to localStorage
+    try {
+      localStorage.setItem('currentUser', JSON.stringify(userData));
+    } catch (error) {
+      // Silent fail - localStorage might be full or disabled
+    }
   }, []);
 
   const handleSignOut = useCallback(() => {
     if (window.suprsend?.reset) {
       window.suprsend.reset();
     }
+    
+    // Clear tasks for this user before clearing user data
+    try {
+      if (currentUser?.distinctId) {
+        const userTasksKey = `tasks_${currentUser.distinctId}`;
+        localStorage.removeItem(userTasksKey);
+      }
+    } catch (error) {
+      // Silent fail
+    }
+    
     setCurrentUser(null);
-  }, []);
+    // Remove user from localStorage
+    try {
+      localStorage.removeItem('currentUser');
+    } catch (error) {
+      // Silent fail
+    }
+  }, [currentUser?.distinctId]);
 
   // Set user context for notification tracking
   useEffect(() => {
@@ -138,6 +178,20 @@ const AuthApp = () => {
       window.currentUserName = userName;
     }
   }, [currentUser]);
+
+  // Show loading state while checking for saved user
+  if (isLoading) {
+    return (
+      <div className="auth-app">
+        <div className="auth-container">
+          <div className="auth-header">
+            <h1>Task Management App</h1>
+            <p>Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Render authenticated app
   if (currentUser) {

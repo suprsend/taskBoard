@@ -59,29 +59,159 @@ function NotificationCategoryPreferences({
   const suprSendClient = useSuprSendClient();
   const [loading, setLoading] = useState(false);
 
-  // Filter out task assignment related sections and subcategories
-  const filteredSections = preferenceData?.sections?.map(section => {
+  // Define allowed category names (section/category level) - e.g., "task-updates"
+  const ALLOWED_CATEGORY_NAMES = [
+    'task-updates',
+    'task_updates',
+    'task updates',
+    'taskupdate'
+  ];
+
+  // Define allowed subcategory names (what we want to show)
+  // We show: task-updates (for status changes), task-created, task-deleted
+  const ALLOWED_SUBCATEGORY_NAMES = [
+    'task created',
+    'task-created',
+    'task_created',
+    'taskcreated',
+    'task updates',
+    'task-updates',
+    'task_updates',
+    'taskupdate',
+    'task status changed',
+    'task-status-changed',
+    'task_status_changed',
+    'taskstatuschanged',
+    'task status',
+    'task-status',
+    'task_status',
+    'task deleted',
+    'task-deleted',
+    'task_deleted',
+    'taskdeleted'
+  ];
+
+  // Helper function to check if a category section should be shown (e.g., "task-updates")
+  const isAllowedCategorySection = (categoryName, sectionName) => {
+    const normalizedCategory = (categoryName || '').toLowerCase().trim();
+    const normalizedSection = (sectionName || '').toLowerCase().trim();
+    
+    // Check if it's task-updates category
+    return ALLOWED_CATEGORY_NAMES.some(allowed => 
+      normalizedCategory === allowed || 
+      normalizedCategory.includes(allowed) ||
+      normalizedSection === allowed ||
+      normalizedSection.includes(allowed)
+    );
+  };
+
+  // Helper function to check if a subcategory should be shown
+  const isAllowedSubcategory = (subcategoryName, description) => {
+    const normalizedSubcategory = (subcategoryName || '').toLowerCase().trim();
+    const normalizedDescription = (description || '').toLowerCase().trim();
+    
+    // Check if subcategory name matches our allowed list
+    const subcategoryMatch = ALLOWED_SUBCATEGORY_NAMES.some(allowed => 
+      normalizedSubcategory === allowed || 
+      normalizedSubcategory.includes(allowed) ||
+      allowed.includes(normalizedSubcategory)
+    );
+    
+    // Check if description contains keywords for our three categories
+    // task-updates (for status changes), task-created, task-deleted
+    const descriptionMatch = 
+      (normalizedDescription.includes('task') && normalizedDescription.includes('created')) ||
+      (normalizedDescription.includes('task') && (normalizedDescription.includes('status') || normalizedDescription.includes('changed') || normalizedDescription.includes('update'))) ||
+      (normalizedDescription.includes('task') && normalizedDescription.includes('deleted'));
+    
+    return subcategoryMatch || descriptionMatch;
+  };
+
+  // Debug: Log all categories to help identify what SuprSend returns
+  // Remove this in production if not needed
+  useEffect(() => {
+    if (preferenceData?.sections) {
+      console.log('📋 All categories from SuprSend:', 
+        JSON.stringify(preferenceData.sections.map(section => ({
+          sectionName: section.name,
+          subcategories: section.subcategories?.map(sub => ({
+            category: sub.category,
+            name: sub.name,
+            description: sub.description
+          }))
+        })), null, 2)
+      );
+      
+      // Also log raw structure
+      console.log('📋 Raw sections data:', preferenceData.sections);
+    }
+  }, [preferenceData]);
+
+  // Filter to show sections that contain at least one allowed subcategory
+  // Then filter subcategories to only show Task Created, Task Status Changed, Task Deleted
+  const filteredSections = preferenceData?.sections?.filter(section => {
+    if (!section) return false;
+    
+    const sectionName = section.name || '';
+    const subcategories = section.subcategories || [];
+    
+    console.log(`🔍 Checking section: "${sectionName}" with ${subcategories.length} subcategories`);
+    
+    // Check if ANY subcategory in this section matches our allowed list
+    const hasAllowedSubcategory = subcategories.some(subcategory => {
+      if (!subcategory) return false;
+      const categoryName = subcategory.category || '';
+      const subcategoryName = subcategory.name || '';
+      const description = subcategory.description || '';
+      
+      // Check if section category matches OR subcategory matches
+      const sectionMatch = isAllowedCategorySection(categoryName, sectionName);
+      const subcategoryMatch = isAllowedSubcategory(subcategoryName, description);
+      
+      return sectionMatch || subcategoryMatch;
+    });
+    
+    console.log(`   → Section has allowed subcategory: ${hasAllowedSubcategory}`);
+    
+    return hasAllowedSubcategory;
+  }).map(section => {
     if (!section) return section;
     
-    // Filter out task assignment related subcategories
+    console.log(`📝 Filtering subcategories in section: "${section.name}"`);
+    
+    // Filter subcategories to only show Task Created, Task Status Changed, Task Deleted
+    // Exclude task-assignments
     const filteredSubcategories = section.subcategories?.filter(subcategory => {
       if (!subcategory) return false;
       
-      const categoryName = (subcategory.category || '').toLowerCase();
-      const subcategoryName = (subcategory.name || '').toLowerCase();
-      const description = (subcategory.description || '').toLowerCase();
+      const subcategoryName = subcategory.name || '';
+      const categoryName = subcategory.category || '';
+      const description = subcategory.description || '';
       
-      // Check if it's related to task assignment
+      // Explicitly exclude task-assignments
       const isTaskAssignment = 
-        (categoryName.includes('task') && categoryName.includes('assign')) ||
-        categoryName.includes('assignment') ||
-        (subcategoryName.includes('task') && subcategoryName.includes('assign')) ||
-        subcategoryName.includes('assignment') ||
-        (description.includes('task') && description.includes('assign')) ||
-        description.includes('assignment');
+        categoryName.toLowerCase().includes('task-assignment') ||
+        categoryName.toLowerCase().includes('task_assignment') ||
+        subcategoryName.toLowerCase().includes('task-assignment') ||
+        subcategoryName.toLowerCase().includes('task_assignment');
       
-      return !isTaskAssignment;
-    });
+      if (isTaskAssignment) {
+        console.log(`   ❌ Excluding task-assignment: "${subcategoryName}"`);
+        return false;
+      }
+      
+      console.log(`   Checking subcategory: name="${subcategoryName}", category="${categoryName}"`);
+      
+      // Check if it matches our allowed subcategories
+      const isAllowed = isAllowedSubcategory(subcategoryName, description) || 
+                       isAllowedCategorySection(categoryName, '');
+      
+      console.log(`   → Subcategory allowed: ${isAllowed}`);
+      
+      return isAllowed;
+    }) || [];
+    
+    console.log(`   Result: ${filteredSubcategories.length} subcategories after filtering`);
     
     return {
       ...section,
@@ -89,10 +219,131 @@ function NotificationCategoryPreferences({
     };
   }).filter(section => {
     // Remove sections that have no subcategories after filtering
-    return section?.subcategories?.length > 0;
+    const hasSubcategories = section?.subcategories?.length > 0;
+    console.log(`✅ Section "${section?.name}" has ${section?.subcategories?.length || 0} subcategories - ${hasSubcategories ? 'KEEPING' : 'REMOVING'}`);
+    return hasSubcategories;
   }) || [];
+  
+  console.log(`🎯 Final filtered sections count: ${filteredSections.length}`);
 
-  if (!filteredSections.length) return null;
+  // If no filtered sections, show all sections temporarily for debugging
+  // This helps identify what categories SuprSend is actually returning
+  if (!filteredSections.length) {
+    console.warn('⚠️ No categories matched the filter. Showing all categories for debugging.');
+    console.log('📊 All available sections:', preferenceData?.sections);
+    
+    // Temporarily show all sections to help debug
+    // Remove this in production once categories are correctly set up
+    const allSections = preferenceData?.sections || [];
+    
+    if (allSections.length === 0) {
+      return (
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <p className="text-gray-500 text-center py-8">
+            No notification categories available. Please check your SuprSend configuration.
+          </p>
+        </div>
+      );
+    }
+    
+    // Show all sections for debugging
+    return (
+      <div className="space-y-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+          <p className="text-sm text-yellow-800">
+            <strong>Debug Mode:</strong> Showing all categories because filtering returned no results. 
+            Check browser console for category names.
+          </p>
+        </div>
+        {allSections.map((section, index) => {
+          return (
+            <div key={index} className="bg-white rounded-lg shadow-sm border p-6">
+              {section?.name && (
+                <div className="mb-6 pb-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    {section.name}
+                  </h3>
+                  {section.description && (
+                    <p className="text-sm text-gray-600">{section.description}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-6">
+                {section?.subcategories?.map((subcategory, subIndex) => {
+                  return (
+                    <div
+                      key={subIndex}
+                      className="pb-6 border-b border-gray-100 last:border-b-0 last:pb-0"
+                    >
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex-1">
+                          <h4 className="text-base font-semibold text-gray-900 mb-1">
+                            {subcategory.name}
+                          </h4>
+                          <p className="text-xs text-gray-500 mb-1">
+                            Category: {subcategory.category || 'N/A'}
+                          </p>
+                          {subcategory.description && (
+                            <p className="text-sm text-gray-600">
+                              {subcategory.description}
+                            </p>
+                          )}
+                        </div>
+                        <Switch
+                          disabled={!subcategory.is_editable || loading}
+                          onChange={(data) => {
+                            setLoading(true);
+                            handleCategoryPreferenceChange({
+                              data,
+                              subcategory,
+                              setPreferenceData,
+                              suprSendClient,
+                            }).finally(() => setLoading(false));
+                          }}
+                          uncheckedIcon={false}
+                          checkedIcon={false}
+                          height={20}
+                          width={40}
+                          onColor="#2563EB"
+                          checked={subcategory.preference === PreferenceOptions.OPT_IN}
+                          className="ml-4"
+                        />
+                      </div>
+
+                      {subcategory?.channels && subcategory.channels.length > 0 && (
+                        <div className="flex flex-wrap gap-3 mt-4">
+                          {subcategory.channels.map((channel, channelIndex) => {
+                            return (
+                              <Checkbox
+                                key={channelIndex}
+                                value={channel.preference}
+                                title={channel.channel}
+                                disabled={!channel.is_editable || loading}
+                                onClick={() => {
+                                  setLoading(true);
+                                  handleChannelPreferenceInCategoryChange({
+                                    channel,
+                                    subcategory,
+                                    setPreferenceData,
+                                    suprSendClient,
+                                  }).finally(() => setLoading(false));
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -334,7 +585,7 @@ function Checkbox({ title, value, onClick, disabled }) {
   return (
     <div
       className={`
-        inline-flex items-center px-3 py-1.5 rounded-full border transition-colors
+        inline-flex items-center px-3 py-1.5 rounded-lg border transition-colors
         ${selected 
           ? 'border-blue-500 bg-blue-50' 
           : 'border-gray-300 bg-white hover:border-gray-400'
@@ -346,7 +597,7 @@ function Checkbox({ title, value, onClick, disabled }) {
       `}
       onClick={disabled ? undefined : onClick}
     >
-      <Circle selected={selected} disabled={disabled} />
+      <CheckboxIcon selected={selected} disabled={disabled} />
       <span className={`ml-2 text-sm font-medium ${
         selected ? 'text-blue-700' : 'text-gray-700'
       }`}>
@@ -356,20 +607,35 @@ function Checkbox({ title, value, onClick, disabled }) {
 );
 }
 
-function Circle({ selected, disabled }) {
-  const bgColor = selected
-    ? disabled
-      ? "#BDCFF8"
-      : "#2463EB"
-    : disabled
-    ? "#D0CFCF"
-    : "#FFF";
-
+function CheckboxIcon({ selected, disabled }) {
   return (
     <div
-      className="w-5 h-5 rounded-full border border-gray-400 flex-shrink-0"
-      style={{ backgroundColor: bgColor }}
-    />
+      className={`
+        w-5 h-5 border-2 rounded flex items-center justify-center flex-shrink-0 transition-colors
+        ${selected 
+          ? disabled
+            ? 'border-blue-400 bg-blue-200'
+            : 'border-blue-600 bg-blue-600'
+          : disabled
+          ? 'border-gray-300 bg-gray-100'
+          : 'border-gray-400 bg-white'
+        }
+      `}
+    >
+      {selected && (
+        <svg
+          className={`w-3.5 h-3.5 ${disabled ? 'text-blue-600' : 'text-white'}`}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2.5"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+    </div>
   );
 }
 

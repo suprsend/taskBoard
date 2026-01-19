@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { LayoutDashboard, Bell, User, LogOut } from 'lucide-react';
 import SimpleTaskBoard from './SimpleTaskBoard';
 import NotificationPreferences from './NotificationPreferences';
@@ -99,6 +99,44 @@ const SignOutButton = ({ onSignOut }) => (
 const MainLayout = ({ user, onSignOut }) => {
   const [activeTab, setActiveTab] = useState('taskboard');
   const [tasks, setTasks] = useState([]);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Load tasks from localStorage when user is available
+  useEffect(() => {
+    if (!user?.distinctId) {
+      setTasks([]);
+      setIsInitialLoad(false);
+      return;
+    }
+
+    try {
+      const userTasksKey = `tasks_${user.distinctId}`;
+      const savedTasks = localStorage.getItem(userTasksKey);
+      
+      if (savedTasks) {
+        const parsedTasks = JSON.parse(savedTasks);
+        setTasks(Array.isArray(parsedTasks) ? parsedTasks : []);
+      } else {
+        setTasks([]);
+      }
+    } catch (error) {
+      setTasks([]);
+    } finally {
+      setIsInitialLoad(false);
+    }
+  }, [user?.distinctId]);
+
+  // Save tasks to localStorage whenever they change (but not during initial load)
+  useEffect(() => {
+    if (!user?.distinctId || isInitialLoad) return;
+
+    try {
+      const userTasksKey = `tasks_${user.distinctId}`;
+      localStorage.setItem(userTasksKey, JSON.stringify(tasks));
+    } catch (error) {
+      // Silent fail
+    }
+  }, [tasks, user?.distinctId, isInitialLoad]);
 
   const handleTabChange = useCallback((tabId) => {
     setActiveTab(tabId);
