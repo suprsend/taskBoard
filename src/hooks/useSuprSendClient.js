@@ -155,12 +155,20 @@ export const useSuprSendClient = () => {
       if (!shouldSendNotification) return;
       
       const userInfo = getCurrentUserInfo();
+      // Generate task URL (you can customize this based on your app's URL structure)
+      const taskUrl = `${window.location.origin}/task/${taskId}`;
+      // Generate unsubscribe URL for email preferences
+      const unsubscribeUrl = `${window.location.origin}/preferences?email=${encodeURIComponent(userInfo.email)}`;
+      
       const eventData = {
         task_title: taskTitle,
         old_status: oldStatus,
         new_status: newStatus,
         task_id: taskId,
+        task_url: taskUrl,  // Add task_url for email template
         user_name: userInfo.name,
+        actor_name: userInfo.name,  // Template expects actor_name
+        unsubscribe_url: unsubscribeUrl,  // Template expects unsubscribe_url
         timestamp: new Date().toISOString()
       };
       
@@ -185,6 +193,11 @@ export const useSuprSendClient = () => {
       if (!shouldSendNotification) return;
       
       const userInfo = getCurrentUserInfo();
+      // Generate task URL (you can customize this based on your app's URL structure)
+      const taskUrl = `${window.location.origin}/task/${taskData.id}`;
+      // Generate unsubscribe URL for email preferences
+      const unsubscribeUrl = `${window.location.origin}/preferences?email=${encodeURIComponent(userInfo.email)}`;
+      
       const eventProperties = {
         task_title: taskData.title,
         task_id: taskData.id,
@@ -192,7 +205,10 @@ export const useSuprSendClient = () => {
         task_description: taskData.description || '',
         task_due_date: taskData.dueDate || '',
         task_status: taskData.status,
+        task_url: taskUrl,  // Add task_url for email template
         user_name: userInfo.name,
+        actor_name: userInfo.name,  // Template might expect actor_name
+        unsubscribe_url: unsubscribeUrl,  // Template expects unsubscribe_url
         timestamp: new Date().toISOString()
       };
 
@@ -217,12 +233,20 @@ export const useSuprSendClient = () => {
       if (!shouldSendNotification) return;
       
       const userInfo = getCurrentUserInfo();
+      // Generate task URL (you can customize this based on your app's URL structure)
+      const taskUrl = `${window.location.origin}/task/${taskData.id}`;
+      // Generate unsubscribe URL for email preferences
+      const unsubscribeUrl = `${window.location.origin}/preferences?email=${encodeURIComponent(userInfo.email)}`;
+      
       const eventProperties = {
         task_title: taskData.title,
         task_id: taskData.id,
         task_priority: taskData.priority,
         task_status: taskData.status,
+        task_url: taskUrl,  // Add task_url for email template
         user_name: userInfo.name,
+        actor_name: userInfo.name,  // Template might expect actor_name
+        unsubscribe_url: unsubscribeUrl,  // Template expects unsubscribe_url
         timestamp: new Date().toISOString()
       };
 

@@ -13,9 +13,12 @@ const generateOTP = () => {
 const sendOTPEmail = async (email, otp, userName = 'User') => {
   const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
   if (!apiKey) {
-    throw new Error('REACT_APP_SUPRSEND_API_KEY is not configured');
+    console.error('❌ REACT_APP_SUPRSEND_API_KEY is not configured');
+    throw new Error('REACT_APP_SUPRSEND_API_KEY is not configured. Please check your environment variables.');
   }
+  
   const workflowSlug = process.env.REACT_APP_OTP_WORKFLOW_SLUG || 'otp_verification';
+  console.log('📧 Sending OTP:', { email, workflowSlug, hasApiKey: !!apiKey });
   
   const workflowPayload = {
     workflow: workflowSlug,
@@ -29,29 +32,58 @@ const sendOTPEmail = async (email, otp, userName = 'User') => {
       }
     ],
     data: {
-      otp: otp,
+      code: otp,  // Template expects 'code', not 'otp'
+      otp: otp,   // Keep 'otp' for backward compatibility
       user_name: userName
     }
   };
   
-  const response = await fetch('https://hub.suprsend.com/trigger/', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    mode: 'cors',
-    credentials: 'omit',
-    body: JSON.stringify(workflowPayload)
-  });
-  
-  if (!response.ok) {
+  try {
+    console.log('📤 Sending OTP request to SuprSend:', {
+      url: 'https://hub.suprsend.com/trigger/',
+      workflow: workflowSlug,
+      email: email,
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0
+    });
+    
+    const response = await fetch('https://hub.suprsend.com/trigger/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      mode: 'cors',
+      credentials: 'omit',
+      body: JSON.stringify(workflowPayload)
+    });
+    
     const responseText = await response.text();
-    throw new Error(`Failed to send OTP: ${response.status} - ${responseText}`);
+    console.log('📧 OTP API Response:', { status: response.status, statusText: response.statusText, body: responseText });
+    
+    if (!response.ok) {
+      let errorMessage = `Failed to send OTP: ${response.status}`;
+      try {
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData.message || errorData.error || errorMessage;
+        console.error('❌ OTP Error Details:', errorData);
+      } catch (e) {
+        errorMessage = `${errorMessage} - ${responseText}`;
+      }
+      throw new Error(errorMessage);
+    }
+    
+    const result = responseText ? JSON.parse(responseText) : { success: true };
+    console.log('✅ OTP sent successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('❌ OTP Send Error:', error);
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Network error: Unable to connect to SuprSend. Please check your internet connection.');
+    }
+    throw error;
   }
-  
-  return await response.json();
 };
 
 const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
@@ -139,21 +171,36 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
     setError(null);
 
     try {
+      // Check if API key is configured
+      const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
+      if (!apiKey) {
+        throw new Error('API key not configured. Please set REACT_APP_SUPRSEND_API_KEY in your environment variables.');
+      }
+
       const otp = generateOTP();
       setOtpCode(otp);
       
+      console.log('🔐 Generating OTP for:', email);
       const userName = formData.name.trim() || 'User';
       await sendOTPEmail(email, otp, userName);
       
+      console.log('✅ OTP sent successfully, moving to OTP step');
       setStep('otp');
       setError(null);
     } catch (err) {
+      console.error('❌ OTP Send Failed:', err);
       let errorMessage = err.message || 'Failed to send OTP. Please try again.';
       
-      if (err.message.includes('Network error') || err.message.includes('Load failed')) {
-        errorMessage = 'Network error: Unable to send OTP. Please check your internet connection.';
+      if (err.message.includes('Network error') || err.message.includes('Load failed') || err.message.includes('fetch')) {
+        errorMessage = 'Network error: Unable to send OTP. Please check your internet connection and API configuration.';
       } else if (err.message.includes('CORS')) {
         errorMessage = 'CORS error: Please configure CORS settings or use a backend proxy.';
+      } else if (err.message.includes('API key')) {
+        errorMessage = 'Configuration error: ' + err.message;
+      } else if (err.message.includes('401') || err.message.includes('403')) {
+        errorMessage = 'Authentication error: Invalid API key. Please check your REACT_APP_SUPRSEND_API_KEY.';
+      } else if (err.message.includes('404')) {
+        errorMessage = 'Workflow not found: Please check if the OTP workflow exists in SuprSend dashboard.';
       }
       
       setError(errorMessage);
