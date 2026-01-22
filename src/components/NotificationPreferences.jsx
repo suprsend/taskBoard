@@ -6,7 +6,6 @@ import {
   useSuprSendClient,
   useAuthenticateUser,
 } from "@suprsend/react";
-import toast from "react-hot-toast";
 import { showCustomToast } from "./CustomToast";
 
 // -------------- Category Level Preferences -------------- //

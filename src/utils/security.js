@@ -62,7 +62,9 @@ export const validateProductionConfig = () => {
   return warnings;
 };
 
-export default {
+const securityUtils = {
   checkApiKeySecurity,
   validateProductionConfig
 };
+
+export default securityUtils;

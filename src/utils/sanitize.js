@@ -116,7 +116,7 @@ export const sanitizeOTP = (otp) => {
   return digits.substring(0, 6);
 };
 
-export default {
+const sanitizeUtils = {
   sanitizeHTML,
   sanitizeText,
   sanitizeEmail,
@@ -126,3 +126,5 @@ export default {
   sanitizeOTP,
   MAX_LENGTHS
 };
+
+export default sanitizeUtils;
