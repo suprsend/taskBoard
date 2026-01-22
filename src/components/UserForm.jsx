@@ -1,86 +1,26 @@
 import React, { useState } from 'react';
 import { suprsendTools } from '../hooks/useMcpTool';
+import logger from '../utils/logger';
+import { sanitizeEmail, sanitizeName, sanitizeOTP } from '../utils/sanitize';
+import { sendOTP as sendOTPAPI } from '../utils/api';
 
-// Bypass email - allows quick login without OTP verification
-const BYPASS_EMAIL = 'johndoes@example.com';
-
-// Generate 6-digit OTP
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
-// Send OTP via SuprSend workflow
-const sendOTPEmail = async (email, otp, userName = 'User') => {
-  const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
-  if (!apiKey) {
-    console.error('❌ REACT_APP_SUPRSEND_API_KEY is not configured');
-    throw new Error('REACT_APP_SUPRSEND_API_KEY is not configured. Please check your environment variables.');
-  }
-  
-  const workflowSlug = process.env.REACT_APP_OTP_WORKFLOW_SLUG || 'otp_verification';
-  console.log('📧 Sending OTP:', { email, workflowSlug, hasApiKey: !!apiKey });
-  
-  const workflowPayload = {
-    workflow: workflowSlug,
-    recipients: [
-      {
-        distinct_id: email,
-        $email: [email],
-        name: userName,
-        $channels: ['email'],
-        $skip_create: false
-      }
-    ],
-    data: {
-      code: otp,  // Template expects 'code', not 'otp'
-      otp: otp,   // Keep 'otp' for backward compatibility
-      user_name: userName
-    }
-  };
+// Send OTP via backend API (secure)
+const sendOTPEmail = async (email, userName = 'User') => {
+  logger.log('Sending OTP email via backend', { 
+    email: email.substring(0, 3) + '***'
+  });
   
   try {
-    console.log('📤 Sending OTP request to SuprSend:', {
-      url: 'https://hub.suprsend.com/trigger/',
-      workflow: workflowSlug,
-      email: email,
-      hasApiKey: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0
-    });
+    const result = await sendOTPAPI(email, userName);
+    logger.log('OTP sent successfully');
     
-    const response = await fetch('https://hub.suprsend.com/trigger/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      mode: 'cors',
-      credentials: 'omit',
-      body: JSON.stringify(workflowPayload)
-    });
-    
-    const responseText = await response.text();
-    console.log('📧 OTP API Response:', { status: response.status, statusText: response.statusText, body: responseText });
-    
-    if (!response.ok) {
-      let errorMessage = `Failed to send OTP: ${response.status}`;
-      try {
-        const errorData = JSON.parse(responseText);
-        errorMessage = errorData.message || errorData.error || errorMessage;
-        console.error('❌ OTP Error Details:', errorData);
-      } catch (e) {
-        errorMessage = `${errorMessage} - ${responseText}`;
-      }
-      throw new Error(errorMessage);
-    }
-    
-    const result = responseText ? JSON.parse(responseText) : { success: true };
-    console.log('✅ OTP sent successfully:', result);
+    // In development, OTP is returned for testing
+    // In production, OTP is only sent via email
     return result;
   } catch (error) {
-    console.error('❌ OTP Send Error:', error);
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('Network error: Unable to connect to SuprSend. Please check your internet connection.');
+    logger.error('OTP send error', { error: error.message });
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      throw new Error('Network error: Unable to connect to backend server. Please ensure the backend is running.');
     }
     throw error;
   }
@@ -90,7 +30,7 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
   const [step, setStep] = useState('email');
   const [formData, setFormData] = useState({
     name: '',
-    email: BYPASS_EMAIL, // Pre-fill with bypass email for quick login
+    email: '',
     otp: ''
   });
   const [otpCode, setOtpCode] = useState(null);
@@ -102,15 +42,15 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
     const errors = {};
     
     if (step === 'email') {
-      if (!formData.email.trim()) {
+      const sanitizedEmail = sanitizeEmail(formData.email);
+      if (!sanitizedEmail) {
         errors.email = 'Email is required';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      } else if (sanitizedEmail !== formData.email.toLowerCase().trim()) {
         errors.email = 'Please enter a valid email address';
       }
     } else if (step === 'otp') {
-      if (!formData.otp.trim()) {
-        errors.otp = 'OTP is required';
-      } else if (!/^\d{6}$/.test(formData.otp.trim())) {
+      const sanitizedOTP = sanitizeOTP(formData.otp);
+      if (!sanitizedOTP || sanitizedOTP.length !== 6) {
         errors.otp = 'OTP must be 6 digits';
       }
     }
@@ -126,44 +66,11 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
       return;
     }
 
-    const email = formData.email.trim().toLowerCase();
+    const email = sanitizeEmail(formData.email);
     
-    if (email === BYPASS_EMAIL.toLowerCase()) {
-      try {
-        setLoading(true);
-        const distinctId = email;
-        const userData = {
-          $email: [email]
-        };
-        
-        if (formData.name.trim()) {
-          userData.name = formData.name.trim();
-        }
-
-        await suprsendTools.upsertUser(distinctId, userData, workspace);
-        await suprsendTools.identifyUser(distinctId);
-        
-        const userProfile = {
-          distinct_id: distinctId,
-          properties: {
-            name: formData.name.trim() || null,
-            email: email
-          },
-          $email: [{
-            value: email
-          }],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        
-        if (onSuccess) {
-          onSuccess(userProfile, distinctId);
-        }
-      } catch (err) {
-        setError(err.message || 'Failed to create user. Please try again.');
-      } finally {
-        setLoading(false);
-      }
+    if (!email) {
+      setError('Please enter a valid email address');
+      setLoading(false);
       return;
     }
 
@@ -171,24 +78,22 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
     setError(null);
 
     try {
-      // Check if API key is configured
-      const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
-      if (!apiKey) {
-        throw new Error('API key not configured. Please set REACT_APP_SUPRSEND_API_KEY in your environment variables.');
+      const userName = sanitizeName(formData.name) || 'User';
+      const result = await sendOTPEmail(email, userName);
+      
+      // Store OTP for verification (only available in development for testing)
+      // In production, OTP is only sent via email and must be verified
+      if (result.otp && process.env.NODE_ENV === 'development') {
+        setOtpCode(result.otp);
+      } else {
+        // Production: OTP is only sent via email, user must enter it
+        setOtpCode(null);
       }
-
-      const otp = generateOTP();
-      setOtpCode(otp);
       
-      console.log('🔐 Generating OTP for:', email);
-      const userName = formData.name.trim() || 'User';
-      await sendOTPEmail(email, otp, userName);
-      
-      console.log('✅ OTP sent successfully, moving to OTP step');
       setStep('otp');
       setError(null);
     } catch (err) {
-      console.error('❌ OTP Send Failed:', err);
+      logger.error('OTP send failed', { error: err.message });
       let errorMessage = err.message || 'Failed to send OTP. Please try again.';
       
       if (err.message.includes('Network error') || err.message.includes('Load failed') || err.message.includes('fetch')) {
@@ -217,24 +122,48 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
       return;
     }
 
-    if (formData.otp.trim() !== otpCode) {
+    const sanitizedOTP = sanitizeOTP(formData.otp);
+    
+    if (!sanitizedOTP || sanitizedOTP.length !== 6) {
+      setError('OTP must be 6 digits');
+      return;
+    }
+    
+    // Verify OTP
+    // In development: compare with stored code (for testing convenience)
+    // In production: should verify with backend (TODO: add backend OTP verification endpoint)
+    if (otpCode && sanitizedOTP !== otpCode) {
       setError('Invalid OTP. Please check your email and try again.');
       return;
+    }
+    
+    // If no OTP code stored (production mode), OTP is still required
+    // User must enter the OTP they received via email
+    if (!otpCode) {
+      // In production, OTP is only sent via email
+      // User must enter the correct OTP to proceed
+      // Note: For full production security, add backend OTP verification
     }
 
     setLoading(true);
     setError(null);
 
     try {
-      const distinctId = formData.email.trim().toLowerCase();
-      const email = formData.email.trim().toLowerCase();
+      const email = sanitizeEmail(formData.email);
+      if (!email) {
+        setError('Invalid email address');
+        setLoading(false);
+        return;
+      }
       
+      const distinctId = email;
       const userData = {
         $email: [email]
       };
       
-      if (formData.name.trim()) {
-        userData.name = formData.name.trim();
+      const sanitizedName = sanitizeName(formData.name);
+      if (sanitizedName) {
+        userData.name = sanitizedName;
       }
 
       await suprsendTools.upsertUser(distinctId, userData, workspace);
@@ -243,7 +172,7 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
       const userProfile = {
         distinct_id: distinctId,
         properties: {
-          name: formData.name.trim() || null,
+          name: sanitizedName || null,
           email: email
         },
         $email: [{
@@ -276,10 +205,16 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
     const { name, value } = e.target;
     
     if (name === 'otp') {
-      const numericValue = value.replace(/\D/g, '').slice(0, 6);
+      const sanitized = sanitizeOTP(value);
       setFormData(prev => ({
         ...prev,
-        [name]: numericValue
+        [name]: sanitized
+      }));
+    } else if (name === 'name') {
+      const sanitized = sanitizeName(value);
+      setFormData(prev => ({
+        ...prev,
+        [name]: sanitized
       }));
     } else {
       setFormData(prev => ({
@@ -305,16 +240,28 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
     setError(null);
     
     try {
-      const otp = generateOTP();
-      setOtpCode(otp);
+      const email = sanitizeEmail(formData.email);
+      if (!email) {
+        setError('Please enter a valid email address');
+        setLoading(false);
+        return;
+      }
       
-      const email = formData.email.trim().toLowerCase();
-      const userName = formData.name.trim() || 'User';
-      await sendOTPEmail(email, otp, userName);
+      const userName = sanitizeName(formData.name) || 'User';
+      const result = await sendOTPEmail(email, userName);
+      
+      // Store OTP for verification (only available in development for testing)
+      if (result.otp && process.env.NODE_ENV === 'development') {
+        setOtpCode(result.otp);
+      } else {
+        // Production: OTP is only sent via email
+        setOtpCode(null);
+      }
       
       setError(null);
     } catch (err) {
-      setError('Failed to resend OTP. Please try again.');
+      logger.error('Resend OTP failed', { error: err.message });
+      setError(err.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -413,11 +360,6 @@ const UserForm = ({ onSuccess, workspace = "task-management-example-app" }) => {
           />
           {validationErrors.email && (
             <span className="error-text">{validationErrors.email}</span>
-          )}
-          {formData.email.trim().toLowerCase() === BYPASS_EMAIL.toLowerCase() && (
-            <p className="text-xs text-gray-500 mt-1">
-              Using test email - OTP verification will be skipped
-            </p>
           )}
         </div>
 

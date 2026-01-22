@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, AlertCircle } from 'lucide-react';
+import { sanitizeTitle, sanitizeDescription, MAX_LENGTHS } from '../utils/sanitize';
 
 // Utility function to get a dummy due date (7 days from today)
 const getDummyDueDate = () => {
@@ -25,8 +26,16 @@ const PRIORITY_OPTIONS = [
 const validateForm = (formData) => {
   const errors = {};
   
-  if (!formData.title.trim()) {
+  const sanitizedTitle = sanitizeTitle(formData.title);
+  if (!sanitizedTitle) {
     errors.title = 'Title is required';
+  } else if (sanitizedTitle.length > MAX_LENGTHS.TITLE) {
+    errors.title = `Title must be less than ${MAX_LENGTHS.TITLE} characters`;
+  }
+  
+  const sanitizedDescription = sanitizeDescription(formData.description);
+  if (sanitizedDescription.length > MAX_LENGTHS.DESCRIPTION) {
+    errors.description = `Description must be less than ${MAX_LENGTHS.DESCRIPTION} characters`;
   }
   
   return errors;
@@ -48,7 +57,7 @@ const FormField = ({ label, required, children, error }) => (
   </div>
 );
 
-const TextInput = ({ value, onChange, placeholder, error, ...props }) => (
+const TextInput = ({ value, onChange, placeholder, error, maxLength, ...props }) => (
   <input
     type="text"
     value={value}
@@ -57,17 +66,19 @@ const TextInput = ({ value, onChange, placeholder, error, ...props }) => (
       error ? 'border-red-500' : 'border-gray-300'
     }`}
     placeholder={placeholder}
+    maxLength={maxLength}
     {...props}
   />
 );
 
-const TextArea = ({ value, onChange, placeholder, rows = 3 }) => (
+const TextArea = ({ value, onChange, placeholder, rows = 3, maxLength }) => (
   <textarea
     value={value}
     onChange={onChange}
     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
     rows={rows}
     placeholder={placeholder}
+    maxLength={maxLength}
   />
 );
 
@@ -134,12 +145,19 @@ const TaskModal = ({ isOpen, onClose, onSubmit, task }) => {
   const handleSubmit = useCallback((e) => {
     e.preventDefault();
     
-    const newErrors = validateForm(formData);
+    const sanitizedData = {
+      title: sanitizeTitle(formData.title),
+      description: sanitizeDescription(formData.description),
+      priority: formData.priority,
+      dueDate: formData.dueDate
+    };
+    
+    const newErrors = validateForm(sanitizedData);
     setErrors(newErrors);
     
     if (Object.keys(newErrors).length === 0) {
       onSubmit({
-        ...formData,
+        ...sanitizedData,
         id: task?.id
       });
       onClose();
@@ -179,16 +197,28 @@ const TaskModal = ({ isOpen, onClose, onSubmit, task }) => {
               onChange={handleInputChange('title')}
               placeholder="e.g., Update company website"
               error={errors.title}
+              maxLength={MAX_LENGTHS.TITLE}
             />
+            {formData.title.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.title.length} / {MAX_LENGTHS.TITLE} characters
+              </p>
+            )}
           </FormField>
 
           {/* Description */}
-          <FormField label="Description">
+          <FormField label="Description" error={errors.description}>
             <TextArea
               value={formData.description}
               onChange={handleInputChange('description')}
               placeholder="e.g., Add new product pages and update contact information"
+              maxLength={MAX_LENGTHS.DESCRIPTION}
             />
+            {formData.description.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.description.length} / {MAX_LENGTHS.DESCRIPTION} characters
+              </p>
+            )}
           </FormField>
 
           {/* Priority and Due Date */}

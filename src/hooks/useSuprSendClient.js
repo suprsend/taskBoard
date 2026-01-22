@@ -1,5 +1,7 @@
 import { useCallback } from 'react';
 import { useSuprSendClient as useSuprSendClientHook, PreferenceOptions } from '@suprsend/react';
+import logger from '../utils/logger';
+import { triggerWorkflow as triggerWorkflowAPI } from '../utils/api';
 
 const getCurrentUserInfo = () => {
   const userEmail = window.currentUserEmail || 'user@example.com';
@@ -13,47 +15,18 @@ const getCurrentUserInfo = () => {
 };
 
 const triggerWorkflow = async (workflowSlug, userEmail, distinctId, userName, eventData) => {
-  const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
-  if (!apiKey) {
-    throw new Error('REACT_APP_SUPRSEND_API_KEY is not configured');
-  }
-  
-  const workflowPayload = {
-    workflow: workflowSlug,
-    recipients: [
-      {
-        distinct_id: distinctId,
-        $email: [userEmail],
-        name: userName,
-        $channels: ['email', 'inbox'],
-        $skip_create: false
-      }
-    ],
-    data: eventData
-  };
-  
   try {
-    const response = await fetch('https://hub.suprsend.com/trigger/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      mode: 'cors',
-      credentials: 'omit',
-      body: JSON.stringify(workflowPayload)
+    logger.log('Triggering workflow via backend', { 
+      workflow: workflowSlug,
+      email: userEmail.substring(0, 3) + '***'
     });
-  
-    const responseText = await response.text();
-  
-    if (!response.ok) {
-      throw new Error(`Workflow trigger failed: ${response.status} - ${responseText}`);
-    }
     
-    return responseText ? JSON.parse(responseText) : { success: true };
+    const result = await triggerWorkflowAPI(workflowSlug, userEmail, distinctId, userName, eventData);
+    
+    logger.log('Workflow triggered successfully', { workflow: workflowSlug });
+    return result;
   } catch (error) {
-    console.error('Failed to trigger workflow:', error);
+    logger.error('Failed to trigger workflow', { error: error.message, workflow: workflowSlug });
     throw new Error(`Failed to trigger workflow: ${error.message}`);
   }
 };
@@ -142,17 +115,23 @@ export const useSuprSendClient = () => {
       
       return true;
     } catch (error) {
-      console.error('Error checking task notification preferences:', error);
+      logger.error('Error checking task notification preferences', { error: error.message });
       return true;
     }
   }, [suprSendClient]);
 
   const trackTaskStatusChange = useCallback(async (taskTitle, oldStatus, newStatus, taskId) => {
-    if (!suprSendClient) return;
+    if (!suprSendClient) {
+      logger.warn('trackTaskStatusChange: suprSendClient not available');
+      return;
+    }
     
     try {
       const shouldSendNotification = await checkTaskNotificationPreference();
-      if (!shouldSendNotification) return;
+      if (!shouldSendNotification) {
+        logger.log('Notifications disabled by user preference');
+        return;
+      }
       
       const userInfo = getCurrentUserInfo();
       // Generate task URL (you can customize this based on your app's URL structure)
@@ -181,16 +160,22 @@ export const useSuprSendClient = () => {
         eventData
       );
     } catch (error) {
-      console.error('Failed to track task status change:', error);
+      logger.error('Failed to track task status change', { error: error.message });
     }
   }, [suprSendClient, checkTaskNotificationPreference]);
 
   const trackTaskCreated = useCallback(async (taskData) => {
-    if (!suprSendClient) return;
+    if (!suprSendClient) {
+      logger.warn('trackTaskCreated: suprSendClient not available');
+      return;
+    }
     
     try {
       const shouldSendNotification = await checkTaskNotificationPreference();
-      if (!shouldSendNotification) return;
+      if (!shouldSendNotification) {
+        logger.log('Notifications disabled by user preference');
+        return;
+      }
       
       const userInfo = getCurrentUserInfo();
       // Generate task URL (you can customize this based on your app's URL structure)
@@ -221,16 +206,22 @@ export const useSuprSendClient = () => {
         eventProperties
       );
     } catch (error) {
-      console.error('Failed to track task creation:', error);
+      logger.error('Failed to track task creation', { error: error.message });
     }
   }, [suprSendClient, checkTaskNotificationPreference]);
 
   const trackTaskDeleted = useCallback(async (taskData) => {
-    if (!suprSendClient) return;
+    if (!suprSendClient) {
+      logger.warn('trackTaskDeleted: suprSendClient not available');
+      return;
+    }
     
     try {
       const shouldSendNotification = await checkTaskNotificationPreference();
-      if (!shouldSendNotification) return;
+      if (!shouldSendNotification) {
+        logger.log('Notifications disabled by user preference');
+        return;
+      }
       
       const userInfo = getCurrentUserInfo();
       // Generate task URL (you can customize this based on your app's URL structure)
@@ -259,7 +250,7 @@ export const useSuprSendClient = () => {
         eventProperties
       );
     } catch (error) {
-      console.error('Failed to track task deletion:', error);
+      logger.error('Failed to track task deletion', { error: error.message });
     }
   }, [suprSendClient, checkTaskNotificationPreference]);
 

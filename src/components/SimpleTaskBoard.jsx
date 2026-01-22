@@ -4,6 +4,8 @@ import { Inbox } from '@suprsend/react';
 import TaskModal from './TaskModal';
 import ToastNotification from './ToastNotification';
 import { useSuprSendClient } from '../hooks/useSuprSendClient';
+import logger from '../utils/logger';
+import { sanitizeTitle, sanitizeDescription } from '../utils/sanitize';
 
 const COLUMNS = [
   { id: 'todo', title: 'To Do', color: 'bg-gray-100' },
@@ -123,47 +125,64 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
 
   // Task handlers
   const handleCreateTask = useCallback(async (taskData) => {
+    const sanitizedTitle = sanitizeTitle(taskData.title || '');
+    if (!sanitizedTitle) {
+      logger.error('Task creation failed: title is required');
+      return;
+    }
+    
     const newTask = {
       id: Date.now().toString(),
-      title: taskData.title || '',
-      description: taskData.description || '',
+      title: sanitizedTitle,
+      description: sanitizeDescription(taskData.description || ''),
       priority: taskData.priority || 'medium',
       dueDate: taskData.dueDate || '',
       status: 'todo'
     };
     
+    logger.log('Creating new task', { taskId: newTask.id });
     setTasks(prevTasks => [...prevTasks, newTask]);
     
     try {
       await trackTaskCreated(newTask);
     } catch (error) {
-      // Silent fail
+      logger.error('Failed to track task creation', { error: error.message });
     }
   }, [setTasks, trackTaskCreated]);
 
   const handleUpdateTask = useCallback((taskData) => {
+    const sanitizedData = {
+      ...taskData,
+      title: sanitizeTitle(taskData.title || ''),
+      description: sanitizeDescription(taskData.description || '')
+    };
+    
+    if (!sanitizedData.title) {
+      logger.error('Task update failed: title is required');
+      return;
+    }
+    
+    logger.log('Updating task', { taskId: taskData.id });
     setTasks(prevTasks => 
       prevTasks.map(task => 
         task.id === taskData.id 
-          ? { ...task, ...taskData } // Merge to preserve status and other fields
+          ? { ...task, ...sanitizedData }
           : task
       )
     );
   }, [setTasks]);
 
   const handleDeleteTask = useCallback(async (taskId) => {
-    // Find the task before deleting to track it
-    const taskToDelete = tasks.find(task => task.id === taskId);
+    logger.log('Deleting task', { taskId });
     
-    // Remove task from state
+    const taskToDelete = tasks.find(task => task.id === taskId);
     setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
     
-    // Track deletion if task was found
     if (taskToDelete) {
       try {
         await trackTaskDeleted(taskToDelete);
       } catch (error) {
-        // Silent fail
+        logger.error('Failed to track task deletion', { error: error.message });
       }
     }
   }, [setTasks, tasks, trackTaskDeleted]);
@@ -187,6 +206,8 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
       const oldStatus = draggedTask.status;
       const newStatus = targetStatus;
       
+      logger.log('Task status change', { taskId: draggedTask.id, oldStatus, newStatus });
+      
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.id === draggedTask.id ? { ...task, status: targetStatus } : task
@@ -201,7 +222,7 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
           draggedTask.id
         );
       } catch (error) {
-        // Silent fail
+        logger.error('Failed to track task status change', { error: error.message });
       }
     }
     setDraggedTask(null);
@@ -241,7 +262,7 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Task Manager</h1>
+              <h1 className="text-2xl font-bold text-gray-900">TaskBoard</h1>
               <p className="text-gray-600">Welcome, {userName}!</p>
             </div>
             <div className="flex items-center space-x-4">

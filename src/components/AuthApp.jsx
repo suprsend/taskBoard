@@ -3,8 +3,15 @@ import { SuprSendProvider, useSuprSendClient } from '@suprsend/react';
 import UserForm from './UserForm';
 import MainLayout from './MainLayout';
 import { suprsendTools } from '../hooks/useMcpTool';
+import logger from '../utils/logger';
+import { validateProductionConfig } from '../utils/security';
 
 const DEFAULT_WORKSPACE = process.env.REACT_APP_SUPRSEND_WORKSPACE || 'task-management-example-app';
+
+// Validate production configuration on module load
+if (process.env.NODE_ENV === 'production') {
+  validateProductionConfig();
+}
 
 // Component to set default channel preferences
 const SetDefaultPreferences = ({ distinctId }) => {
@@ -18,7 +25,7 @@ const SetDefaultPreferences = ({ distinctId }) => {
       try {
         const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
         if (!apiKey) {
-          console.error('REACT_APP_SUPRSEND_API_KEY is not configured');
+          logger.error('REACT_APP_SUPRSEND_API_KEY is not configured');
           return;
         }
         const userEmail = window.currentUserEmail || distinctId;
@@ -89,7 +96,7 @@ const SetDefaultPreferences = ({ distinctId }) => {
         
         setHasSetPreferences(true);
       } catch (error) {
-        console.error('Error setting default preferences:', error);
+        logger.error('Error setting default preferences', { error: error.message });
       }
     };
 
@@ -185,7 +192,7 @@ const AuthApp = () => {
       <div className="auth-app">
         <div className="auth-container">
           <div className="auth-header">
-            <h1>Task Management App</h1>
+            <h1>TaskBoard</h1>
             <p>Loading...</p>
           </div>
         </div>
@@ -197,8 +204,15 @@ const AuthApp = () => {
   if (currentUser) {
     const publicApiKey = process.env.REACT_APP_SUPRSEND_PUBLIC_KEY;
     if (!publicApiKey) {
-      console.error('REACT_APP_SUPRSEND_PUBLIC_KEY is not configured');
-      return <div>Configuration error: Missing SuprSend public key</div>;
+      logger.error('REACT_APP_SUPRSEND_PUBLIC_KEY is not configured');
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-md">
+            <h2 className="text-xl font-semibold text-red-600 mb-2">Configuration Error</h2>
+            <p className="text-gray-600">Missing SuprSend public key. Please check your environment variables.</p>
+          </div>
+        </div>
+      );
     }
 
     return (
@@ -220,7 +234,7 @@ const AuthApp = () => {
     <div className="auth-app">
       <div className="auth-container">
         <div className="auth-header">
-          <h1>Task Management App</h1>
+          <h1>TaskBoard</h1>
           <p>Enter your email to get started</p>
         </div>
         

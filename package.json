@@ -1,7 +1,7 @@
 {
-  "name": "task-management-app",
+  "name": "taskboard",
   "version": "1.0.0",
-  "description": "Task Management App with SuprSend notifications",
+  "description": "TaskBoard - Task Management App with SuprSend notifications",
   "private": true,
   "dependencies": {
     "@suprsend/react": "^0.3.1",
@@ -21,7 +21,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "backend": "cd backend && npm start",
+    "frontend": "npm start"
   },
   "eslintConfig": {
     "extends": [

@@ -1,16 +1,16 @@
-# Task Management App
+# TaskBoard
 
-A modern, production-ready task management application with real-time notifications, OTP email verification, and customizable notification preferences. Built with React and powered by SuprSend for seamless communication.
+A modern, production-ready task management application with real-time notifications, secure OTP email verification, and customizable notification preferences. Built with React and powered by SuprSend.
 
 ## ✨ Features
 
 - 📋 **Kanban Board** - Drag & drop task management with multiple status columns
 - 🔔 **Real-time Notifications** - In-app feed and email notifications for task updates
-- 🔐 **OTP Verification** - Secure email-based authentication with OTP verification
+- 🔐 **Secure OTP Verification** - Mandatory email-based authentication with OTP verification
 - ⚙️ **Notification Preferences** - Granular control over notification channels and categories
 - 📱 **Responsive Design** - Beautiful, modern UI that works on all devices
 - 🎯 **Task Management** - Create, edit, delete, and track tasks with priorities and due dates
-- 🔔 **Toast Notifications** - Non-intrusive toast notifications for real-time updates
+- 🔔 **Toast Notifications** - Custom styled toast notifications matching TaskBoard design
 
 ## 🚀 Quick Start
 
@@ -24,27 +24,42 @@ A modern, production-ready task management application with real-time notificati
 
 1. **Clone the repository**
 
-2. **Install dependencies**
+2. **Install frontend dependencies**
    ```bash
    npm install
    ```
 
-3. **Configure environment variables**
-   
-   Create a `.env` file in the root directory:
-   ```env
-   REACT_APP_SUPRSEND_WORKSPACE=your-workspace-name
-   REACT_APP_SUPRSEND_API_KEY=your-api-key
-   REACT_APP_SUPRSEND_PUBLIC_KEY=your-public-key
-   
-   # Optional: Workflow slugs (defaults provided)
-   REACT_APP_OTP_WORKFLOW_SLUG=otp_verification
-   REACT_APP_TASK_CREATED_WORKFLOW_SLUG=task_created
-   REACT_APP_TASK_STATUS_WORKFLOW_SLUG=task_status_changed
+3. **Install backend dependencies**
+   ```bash
+   cd backend
+   npm install
    ```
 
+4. **Configure environment variables**
 
-4. **Run development server**
+   **Frontend `.env` (root directory):**
+   ```env
+   REACT_APP_SUPRSEND_WORKSPACE=your-workspace-name
+   REACT_APP_SUPRSEND_PUBLIC_KEY=your-public-key
+   REACT_APP_API_URL=http://localhost:3002
+   ```
+
+   **Backend `.env` (backend directory):**
+   ```env
+   SUPRSEND_API_KEY=your-api-key
+   SUPRSEND_WORKSPACE=your-workspace-name
+   PORT=3002
+   FRONTEND_URL=http://localhost:3000
+   NODE_ENV=development
+   ```
+
+5. **Start backend server**
+   ```bash
+   cd backend
+   npm start
+   ```
+
+6. **Start frontend server** (in a new terminal)
    ```bash
    npm start
    ```
@@ -53,36 +68,52 @@ A modern, production-ready task management application with real-time notificati
 
 ## 📦 Building for Production
 
+**Build frontend:**
 ```bash
 npm run build
 ```
 
-This creates an optimized production build in the `build/` folder, ready for deployment.
+**Start backend in production:**
+```bash
+cd backend
+NODE_ENV=production npm start
+```
 
 ## 🔧 Configuration
 
-### Required Environment Variables
+### Frontend Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `REACT_APP_SUPRSEND_WORKSPACE` | Your SuprSend workspace name | ✅ Yes |
-| `REACT_APP_SUPRSEND_API_KEY` | SuprSend API key for backend operations | ✅ Yes |
 | `REACT_APP_SUPRSEND_PUBLIC_KEY` | SuprSend public key for frontend SDK | ✅ Yes |
+| `REACT_APP_API_URL` | Backend API URL | ✅ Yes |
+
+### Backend Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `SUPRSEND_API_KEY` | SuprSend API key (server-side only) | ✅ Yes |
+| `SUPRSEND_WORKSPACE` | Your SuprSend workspace name | ✅ Yes |
+| `PORT` | Backend server port | No (default: 3002) |
+| `FRONTEND_URL` | Frontend URL for CORS | No (default: http://localhost:3000) |
 
 ### Optional Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `REACT_APP_OTP_WORKFLOW_SLUG` | OTP verification workflow slug | `otp_verification` |
+| `OTP_WORKFLOW_SLUG` | OTP verification workflow slug | `otp_verification` |
 | `REACT_APP_TASK_CREATED_WORKFLOW_SLUG` | Task creation workflow slug | `task_created` |
 | `REACT_APP_TASK_STATUS_WORKFLOW_SLUG` | Task status change workflow slug | `task_status_changed` |
-| `REACT_APP_MCP_PROXY_URL` | Backend proxy URL for MCP tools | - |
-| `REACT_APP_BYPASS_EMAIL` | Email to bypass OTP (for testing) | `johndoes@example.com` |
 
 ## 🏗️ Project Structure
 
 ```
 task-mgmt-app/
+├── backend/                  # Backend API server
+│   ├── server.js            # Express server
+│   ├── package.json         # Backend dependencies
+│   └── .env                 # Backend environment variables
 ├── src/
 │   ├── components/          # React components
 │   │   ├── AuthApp.jsx      # Authentication wrapper
@@ -90,26 +121,32 @@ task-mgmt-app/
 │   │   ├── SimpleTaskBoard.jsx  # Main Kanban board
 │   │   ├── TaskModal.jsx    # Task creation/editing
 │   │   ├── ToastNotification.jsx  # Toast notifications
-│   │   └── NotificationPreferences.jsx  # User preferences
+│   │   ├── NotificationPreferences.jsx  # User preferences
+│   │   ├── CustomToast.jsx  # Custom toast component
+│   │   └── ErrorBoundary.jsx  # Error boundary
 │   ├── hooks/               # Custom React hooks
 │   │   ├── useMcpTool.js    # SuprSend MCP integration
 │   │   └── useSuprSendClient.js  # Notification tracking
+│   ├── utils/               # Utility functions
+│   │   ├── api.js           # Backend API client
+│   │   ├── logger.js        # Production-safe logging
+│   │   ├── sanitize.js      # Input sanitization
+│   │   └── security.js      # Security utilities
 │   └── styles/              # CSS files
-├── docs/                    # Documentation
-│   ├── email-templates.md   # Email template setup
-│   └── OTP_WORKFLOW_SETUP.md  # OTP workflow guide
-├── public/                  # Static assets
-└── build/                   # Production build output
+├── public/                   # Static assets
+└── build/                    # Production build output
 ```
 
 ## 🔐 Authentication
 
-The app uses email-based authentication with OTP verification:
+The app uses secure email-based authentication with mandatory OTP verification:
 
-1. **User enters email** - Email field is pre-filled with `johndoes@example.com` for quick testing
-2. **OTP sent** - 6-digit OTP is sent to the provided email
-3. **Verification** - User enters OTP to complete authentication
-4. **Quick login** - `johndoes@example.com` bypasses OTP for demo purposes
+1. **User enters email** - User provides their email address
+2. **OTP sent** - 6-digit OTP is sent to the provided email via backend
+3. **Verification** - User must enter OTP to complete authentication
+4. **User created** - User profile is created in SuprSend after OTP verification
+
+**Note:** OTP verification is mandatory for all users. There is no bypass mechanism.
 
 ## 📋 Task Management
 
@@ -117,17 +154,17 @@ The app uses email-based authentication with OTP verification:
 
 - Click "New Task" button
 - Fill in task details:
-  - **Title** (required) - Pre-filled with "Review quarterly reports"
+  - **Title** (required)
   - **Description** (optional)
   - **Priority** - Low, Medium, or High
-  - **Due Date** - Defaults to 7 days from today
+  - **Due Date** - Select a due date
 - Click "Create Task"
 
 ### Managing Tasks
 
 - **Drag & Drop** - Move tasks between columns (To Do, In Progress, In Review, Completed)
-- **Edit** - Click on a task to edit details
-- **Delete** - Remove tasks you no longer need
+- **Edit** - Click edit icon on a task to modify details
+- **Delete** - Click delete icon to remove tasks
 - **Status Tracking** - Automatic notifications on status changes
 
 ## 🔔 Notifications
@@ -136,6 +173,7 @@ The app uses email-based authentication with OTP verification:
 
 - **Task Created** - Notified when a new task is created
 - **Task Status Changed** - Notified when task moves between columns
+- **Task Deleted** - Notified when a task is deleted
 
 ### Notification Channels
 
@@ -145,29 +183,17 @@ The app uses email-based authentication with OTP verification:
 
 ### Managing Preferences
 
-1. Click on your profile icon → "Notification Preferences"
+1. Navigate to "Notification Preferences"
 2. Toggle notification categories on/off
 3. Control channel preferences (email, inbox) per category
 4. Changes are saved automatically
-
-
-## 🧪 Testing
-
-### Quick Test Login
-
-Use `johndoes@example.com` to bypass OTP verification for quick testing.
-
-### Full OTP Flow
-
-1. Enter any real email address
-2. Check your email for 6-digit OTP
-3. Enter OTP to complete authentication
 
 ## 🛠️ Tech Stack
 
 - **React 18** - UI framework
 - **Tailwind CSS** - Styling
 - **SuprSend** - Notification infrastructure
+- **Express** - Backend API server
 - **React Hot Toast** - Toast notifications
 - **Lucide React** - Icons
 - **React Switch** - Toggle components
@@ -176,28 +202,38 @@ Use `johndoes@example.com` to bypass OTP verification for quick testing.
 
 | Command | Description |
 |---------|-------------|
-| `npm start` | Start development server |
-| `npm run build` | Build for production |
+| `npm start` | Start frontend development server |
+| `npm run build` | Build frontend for production |
 | `npm test` | Run tests |
-| `npm run eject` | Eject from Create React App |
+| `npm run backend` | Start backend server |
+| `npm run frontend` | Start frontend server |
 
 ## 🔒 Security
 
-- ✅ No hardcoded API keys - All secrets via environment variables
-- ✅ OTP verification for secure authentication
+- ✅ API keys stored server-side only
+- ✅ Cryptographically secure OTP generation
+- ✅ Input sanitization and validation
+- ✅ XSS protection
+- ✅ Error boundaries for crash prevention
+- ✅ Production-safe logging
 - ✅ Environment variables properly ignored in Git
-- ✅ Production-ready error handling
 
-## 🤝 Contributing
+## 🚀 Deployment
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+### Frontend Deployment
+
+Deploy the `build/` folder to your hosting platform (Vercel, Netlify, etc.)
+
+### Backend Deployment
+
+Deploy the `backend/` folder to your hosting platform (Heroku, Railway, Render, etc.)
+
+**Important:** Update `REACT_APP_API_URL` in frontend to point to your deployed backend URL.
 
 ## 📄 License
 
 This project is private and proprietary.
+
 ---
 
 **Built with ❤️ using React and SuprSend**

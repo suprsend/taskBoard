@@ -69,6 +69,15 @@ function ToastNotification() {
         bottom: '20px',
         right: '20px',
       }}
+      toastOptions={{
+        className: '',
+        style: {
+          background: 'transparent',
+          boxShadow: 'none',
+          padding: 0,
+          margin: 0,
+        },
+      }}
     />
   );
 }

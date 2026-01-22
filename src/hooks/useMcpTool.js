@@ -13,82 +13,56 @@ export const upsertUser = async (distinctId, userData, workspace = 'task-managem
     throw new Error('Email is required to create user');
   }
   
-  const backendProxyUrl = process.env.REACT_APP_MCP_PROXY_URL;
-  
-  if (backendProxyUrl) {
-    try {
-      const mcpResponse = await fetch(`${backendProxyUrl}/suprsend/upsert-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          distinct_id: distinctId,
-          workspace: workspace,
-          action: 'upsert',
-          object_payload: objectPayload
-        })
-      });
-      
-      if (mcpResponse.ok) {
-        return await mcpResponse.json();
-      }
-    } catch (proxyError) {
-      // Fall through to direct API call
-    }
-  }
+  // Use backend API (secure)
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3002';
   
   try {
-    const apiUrl = `https://hub.suprsend.com/v1/user/${encodeURIComponent(distinctId)}/`;
-    
-    const apiKey = process.env.REACT_APP_SUPRSEND_API_KEY;
-    if (!apiKey) {
-      throw new Error('REACT_APP_SUPRSEND_API_KEY is not configured');
-    }
-    
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${API_BASE_URL}/api/user/upsert`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
       },
-      mode: 'cors',
-      credentials: 'omit',
-      body: JSON.stringify(objectPayload)
+      body: JSON.stringify({
+        distinctId,
+        userData: objectPayload,
+        workspace
+      })
     });
     
     const responseText = await response.text();
     
     if (!response.ok) {
-      let errorMessage = `SuprSend API error: ${response.status}`;
+      let errorMessage = 'Failed to create user';
       try {
-        const errorJson = JSON.parse(responseText);
-        errorMessage = errorJson.message || errorJson.error || errorMessage;
+        const error = responseText ? JSON.parse(responseText) : {};
+        errorMessage = error.error || errorMessage;
       } catch (e) {
         errorMessage = responseText || errorMessage;
       }
       throw new Error(errorMessage);
     }
     
+    // Parse response, handle empty responses
+    if (!responseText || responseText.trim() === '') {
+      return { success: true, message: 'User created successfully' };
+    }
+    
     try {
-      return responseText ? JSON.parse(responseText) : { success: true };
+      return JSON.parse(responseText);
     } catch (parseError) {
+      // If response is not JSON, return success with the text
       return { success: true, message: responseText || 'User created successfully' };
     }
   } catch (error) {
     if (error.message.includes('Failed to fetch') || 
-        error.message.includes('Load failed') ||
-        error.message.includes('NetworkError') ||
-        error.name === 'TypeError') {
+        error.message.includes('NetworkError')) {
       throw new Error(
-        'Network error: Unable to reach SuprSend API. ' +
-        'This may be a CORS issue. To use MCP tools, set up a backend proxy ' +
-        'and configure REACT_APP_MCP_PROXY_URL environment variable.'
+        'Network error: Unable to connect to backend server. ' +
+        'Please ensure the backend is running on ' + API_BASE_URL
       );
     }
     
-    throw new Error(`Failed to create user in SuprSend: ${error.message}`);
+    throw new Error(`Failed to create user: ${error.message}`);
   }
 };
 
@@ -107,7 +81,7 @@ export const resetUser = async () => {
     try {
       await window.suprsend.reset();
     } catch (err) {
-      console.error('Failed to reset user session:', err);
+      // Silent fail - reset is not critical
     }
   }
 };

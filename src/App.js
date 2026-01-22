@@ -1,19 +1,22 @@
 import React from 'react';
 import AuthApp from './components/AuthApp';
+import ErrorBoundary from './components/ErrorBoundary';
 import './styles/AuthStyles.css';
 import './index.css';
 
 /**
  * Main App Component
  * 
- * Entry point for the Task Management App with SuprSend notifications.
+ * Entry point for TaskBoard with SuprSend notifications.
  * Provides user authentication and a Kanban board with real-time notifications.
  */
 function App() {
   return (
-    <div className="App">
-      <AuthApp />
-    </div>
+    <ErrorBoundary>
+      <div className="App">
+        <AuthApp />
+      </div>
+    </ErrorBoundary>
   );
 }
 
