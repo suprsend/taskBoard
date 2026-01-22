@@ -1,9 +1,12 @@
 /**
  * Backend API client
  * Handles all API calls to the backend server
+ * In production (Vercel), uses relative paths for same-domain API calls
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3002';
+// Use relative path in production (Vercel), or explicit URL in development
+const API_BASE_URL = process.env.REACT_APP_API_URL || 
+  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3002');
 
 /**
  * Send OTP email via backend
