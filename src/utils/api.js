@@ -12,20 +12,28 @@ const API_BASE_URL = process.env.REACT_APP_API_URL ||
  * Send OTP email via backend
  */
 export const sendOTP = async (email, userName = 'User') => {
-  const response = await fetch(`${API_BASE_URL}/api/otp/send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, userName }),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/otp/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, userName }),
+    });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to send OTP');
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Failed to send OTP');
+    }
+
+    return response.json();
+  } catch (error) {
+    // Handle network errors (backend not running, CORS, etc.)
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.name === 'TypeError') {
+      throw new Error(`Network error: Backend server is not reachable at ${API_BASE_URL}. Please ensure the backend is running.`);
+    }
+    throw error;
   }
-
-  return response.json();
 };
 
 /**
