@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { LayoutDashboard, Bell, User, LogOut } from 'lucide-react';
 import SimpleTaskBoard from './SimpleTaskBoard';
 import NotificationPreferences from './NotificationPreferences';
+import ToastNotification from './ToastNotification';
 
 // Constants
 const TABS = [
@@ -46,19 +47,23 @@ const TabButton = ({ tab, isActive, onClick }) => {
   );
 };
 
-// User Info Component
+// Unified header height so sidebar user block and main content header align on both pages
+const HEADER_HEIGHT_PX = 72;
+
 const UserInfo = ({ user }) => {
   const { name, email } = getUserDisplayInfo(user);
-  
   return (
-    <div className="p-6 border-b border-gray-200">
-      <div className="flex items-center space-x-3">
+    <div
+      className="border-b border-gray-200 bg-white flex items-center px-6 flex-shrink-0"
+      style={{ minHeight: HEADER_HEIGHT_PX }}
+    >
+      <div className="flex items-center space-x-3 min-w-0">
         <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
           <User className="w-5 h-5 text-white" />
         </div>
-        <div>
-          <h3 className="font-medium text-gray-900">{name}</h3>
-          <p className="text-sm text-gray-500">{email}</p>
+        <div className="min-w-0">
+          <h3 className="font-medium text-gray-900 truncate">{name}</h3>
+          <p className="text-sm text-gray-500 truncate">{email}</p>
         </div>
       </div>
     </div>
@@ -152,7 +157,8 @@ const MainLayout = ({ user, onSignOut }) => {
     activeTab,
     setActiveTab: handleTabChange,
     tasks,
-    setTasks
+    setTasks,
+    headerHeightPx: HEADER_HEIGHT_PX,
   }), [user, onSignOut, activeTab, handleTabChange, tasks]);
 
   return (
@@ -168,12 +174,15 @@ const MainLayout = ({ user, onSignOut }) => {
         <SignOutButton onSignOut={onSignOut} />
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Main Content Area - same header height as sidebar for alignment */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
         {ActiveComponent && (
           <ActiveComponent {...componentProps} />
         )}
       </div>
+
+      {/* Global toasts (preferences success, feed notifications) - mounted here so they show on all tabs */}
+      <ToastNotification />
     </div>
   );
 };

@@ -29,7 +29,8 @@ function validateEnv() {
  */
 function getCorsHeaders() {
   // In Vercel, allow requests from the same origin (since API and frontend are on same domain)
-  // Also allow from explicit FRONTEND_URL if set
+  // Use wildcard for Vercel deployments to allow all origins
+  // In production, Vercel handles CORS automatically for same-domain requests
   const allowedOrigin = process.env.FRONTEND_URL || '*';
   
   return {

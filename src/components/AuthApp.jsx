@@ -157,16 +157,7 @@ const AuthApp = () => {
       window.suprsend.reset();
     }
     
-    // Clear tasks for this user before clearing user data
-    try {
-      if (currentUser?.distinctId) {
-        const userTasksKey = `tasks_${currentUser.distinctId}`;
-        localStorage.removeItem(userTasksKey);
-      }
-    } catch (error) {
-      // Silent fail
-    }
-    
+    // Keep tasks in localStorage (keyed by distinctId) so they persist when user logs in again
     setCurrentUser(null);
     // Remove user from localStorage
     try {
@@ -174,7 +165,7 @@ const AuthApp = () => {
     } catch (error) {
       // Silent fail
     }
-  }, [currentUser?.distinctId]);
+  }, []);
 
   // Set user context for notification tracking
   useEffect(() => {

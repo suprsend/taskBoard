@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Trash2, Edit3, Calendar } from 'lucide-react';
 import { Inbox } from '@suprsend/react';
 import TaskModal from './TaskModal';
-import ToastNotification from './ToastNotification';
 import { useSuprSendClient } from '../hooks/useSuprSendClient';
+import { showCustomToast } from './CustomToast';
 import logger from '../utils/logger';
 import { sanitizeTitle, sanitizeDescription } from '../utils/sanitize';
 
@@ -13,6 +13,8 @@ const COLUMNS = [
   { id: 'in-review', title: 'In Review', color: 'bg-yellow-100' },
   { id: 'completed', title: 'Completed', color: 'bg-green-100' }
 ];
+
+const getStatusLabel = (statusId) => COLUMNS.find((c) => c.id === statusId)?.title ?? statusId;
 
 
 const getPriorityColor = (priority) => {
@@ -108,7 +110,7 @@ const TaskCard = React.memo(({ task, onEdit, onDelete, onDragStart, onDragEnd, i
 TaskCard.displayName = 'TaskCard';
 
 // Main Component
-const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
+const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks, headerHeightPx: headerHeightPxProp }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
@@ -145,8 +147,11 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
     
     try {
       await trackTaskCreated(newTask);
+      const title = newTask.title ? `"${newTask.title}"` : 'Task';
+      showCustomToast(`${title} has been created.`, 'success');
     } catch (error) {
       logger.error('Failed to track task creation', { error: error.message });
+      showCustomToast('Task created but notification could not be sent.', 'warning');
     }
   }, [setTasks, trackTaskCreated]);
 
@@ -181,8 +186,11 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
     if (taskToDelete) {
       try {
         await trackTaskDeleted(taskToDelete);
+        const title = taskToDelete.title ? `"${taskToDelete.title}"` : 'Task';
+        showCustomToast(`${title} has been deleted.`, 'success');
       } catch (error) {
         logger.error('Failed to track task deletion', { error: error.message });
+        showCustomToast('Task deleted but notification could not be sent.', 'warning');
       }
     }
   }, [setTasks, tasks, trackTaskDeleted]);
@@ -221,8 +229,13 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
           newStatus,
           draggedTask.id
         );
+        const title = draggedTask.title ? `"${draggedTask.title}"` : 'Task';
+        const fromLabel = getStatusLabel(oldStatus);
+        const toLabel = getStatusLabel(newStatus);
+        showCustomToast(`${title} has been moved from ${fromLabel} to ${toLabel}.`, 'success');
       } catch (error) {
         logger.error('Failed to track task status change', { error: error.message });
+        showCustomToast('Task updated but notification could not be sent.', 'warning');
       }
     }
     setDraggedTask(null);
@@ -255,35 +268,36 @@ const SimpleTaskBoard = ({ user, onSignOut, tasks, setTasks }) => {
     return user?.profile?.properties?.name || 'User';
   }, [user]);
 
+  const headerHeightPx = headerHeightPxProp ?? 72;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">TaskBoard</h1>
-              <p className="text-gray-600">Welcome, {userName}!</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              {/* Inbox component renders bell, badge, and popover here */}
-              <Inbox pageSize={20} popperPosition="bottom-end">
-                <ToastNotification />
-              </Inbox>
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-                aria-label="Create new task"
-              >
-                <Plus className="w-4 h-4" />
-                <span>New Task</span>
-              </button>
-            </div>
-          </div>
+    <div className="min-h-full flex flex-col bg-gray-50">
+      {/* Page header - same height as sidebar user block for alignment */}
+      <div
+        className="bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0"
+        style={{ minHeight: headerHeightPx }}
+      >
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 600, color: "#3D3D3D", margin: 0 }}>
+            TaskBoard
+          </h1>
+          <p style={{ fontSize: 14, color: "#6C727F", margin: "2px 0 0 0" }}>
+            Welcome, {userName}!
+          </p>
+        </div>
+        <div className="flex items-center space-x-4">
+          <Inbox pageSize={20} popperPosition="bottom-end" />
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors text-sm font-medium"
+            aria-label="Create new task"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Task</span>
+          </button>
         </div>
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

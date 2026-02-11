@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import Switch from "react-switch";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   ChannelLevelPreferenceOptions,
   PreferenceOptions,
@@ -7,6 +8,41 @@ import {
   useAuthenticateUser,
 } from "@suprsend/react";
 import { showCustomToast } from "./CustomToast";
+
+const ICON_GRAY = "#6C727F";
+
+/** Filled envelope icon (SuprSend style) */
+function EmailIconFilled({ size = 20, style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={style} aria-hidden>
+      <path
+        d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"
+        fill={ICON_GRAY}
+      />
+    </svg>
+  );
+}
+
+/** Filled bell icon (SuprSend style) */
+function InboxIconFilled({ size = 20, style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={style} aria-hidden>
+      <path
+        d="M12 2c-1.1 0-2 .9-2 2v.58C7.94 5.34 6 7.96 6 11v4l-2 2h16l-2-2v-4c0-3.04-1.94-5.66-4-6.42V4c0-1.1-.9-2-2-2zm-2 18a2 2 0 004 0H10z"
+        fill={ICON_GRAY}
+      />
+    </svg>
+  );
+}
+
+/** Capitalize channel label for display: Email, Inbox, etc. */
+function formatChannelLabel(channelKey) {
+  if (!channelKey || typeof channelKey !== "string") return channelKey;
+  const lower = channelKey.toLowerCase();
+  if (lower === "email") return "Email";
+  if (lower === "inbox") return "Inbox";
+  return channelKey.charAt(0).toUpperCase() + channelKey.slice(1).toLowerCase();
+}
 
 // -------------- Category Level Preferences -------------- //
 
@@ -45,10 +81,10 @@ const handleChannelPreferenceInCategoryChange = async ({
       subcategory.category
     );
   if (resp.status === "error") {
-    showCustomToast(`Failed to update ${channel.channel} preference: ${resp.error.message}`, 'error');
+    showCustomToast(`Failed to update ${formatChannelLabel(channel.channel)} preference: ${resp.error.message}`, 'error');
   } else {
     setPreferenceData({ ...resp.body });
-    showCustomToast(`${channel.channel} preference updated successfully`, 'success');
+    showCustomToast(`${formatChannelLabel(channel.channel)} preference updated successfully`, 'success');
   }
 };
 
@@ -194,8 +230,8 @@ function NotificationCategoryPreferences({
   // If no filtered sections, show empty state
   if (!filteredSections.length) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <p className="text-gray-500 text-center py-8">
+      <div style={{ marginBottom: 24 }}>
+        <p style={{ color: "#6C727F", textAlign: "center", padding: 24 }}>
           No notification categories available. Please check your SuprSend configuration.
         </p>
       </div>
@@ -203,91 +239,113 @@ function NotificationCategoryPreferences({
   }
 
   return (
-    <div className="space-y-6">
+    <div style={{ marginBottom: 24 }}>
       {filteredSections.map((section, index) => {
         return (
-          <div key={index} className="bg-white rounded-lg shadow-sm border p-6">
-          {section?.name && (
-              <div className="mb-6 pb-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          <div key={index} style={{ marginBottom: 24 }}>
+            {section?.name && section.name.trim().toLowerCase() !== "task management" && (
+              <div
+                style={{
+                  backgroundColor: "#FAFBFB",
+                  paddingTop: index === 0 ? 0 : 12,
+                  paddingBottom: 12,
+                  marginBottom: 18,
+                }}
+              >
+                <p style={{ fontSize: 18, fontWeight: 500, color: "#3D3D3D" }}>
                   {section.name}
-                </h3>
+                </p>
                 {section.description && (
-                  <p className="text-sm text-gray-600">{section.description}</p>
+                  <p style={{ color: "#6C727F" }}>{section.description}</p>
                 )}
-            </div>
-          )}
+              </div>
+            )}
 
-            <div className="space-y-6">
-              {section?.subcategories?.map((subcategory, subIndex) => {
-                return (
+            {section?.subcategories?.map((subcategory, subIndex) => {
+              return (
+                <div
+                  key={subIndex}
+                  style={{
+                    backgroundColor: "#FFF",
+                    border: "1px solid #E5E7EB",
+                    borderRadius: 8,
+                    padding: "16px 20px",
+                    marginTop: index === 0 && subIndex === 0 ? 0 : 16,
+                    marginBottom: 16,
+                  }}
+                >
                   <div
-                    key={subIndex}
-                    className="pb-6 border-b border-gray-100 last:border-b-0 last:pb-0"
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
                   >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <h4 className="text-base font-semibold text-gray-900 mb-1">
-                          {subcategory.name}
-                        </h4>
-                        {subcategory.description && (
-                          <p className="text-sm text-gray-600">
-                    {subcategory.description}
-                  </p>
-                        )}
-                </div>
-                <Switch
-                  disabled={!subcategory.is_editable || loading}
-                        onChange={(data) => {
-                          setLoading(true);
-                          handleCategoryPreferenceChange({
-                            data,
-                            subcategory,
-                            setPreferenceData,
-                            suprSendClient,
-                          }).finally(() => setLoading(false));
+                    <div>
+                      <p
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 600,
+                          color: "#3D3D3D",
+                          margin: 0,
                         }}
-                  uncheckedIcon={false}
-                  checkedIcon={false}
-                  height={20}
-                  width={40}
-                  onColor="#2563EB"
-                  checked={subcategory.preference === PreferenceOptions.OPT_IN}
-                        className="ml-4"
-                />
-              </div>
+                      >
+                        {subcategory.name}
+                      </p>
+                      {subcategory.description && (
+                        <p style={{ color: "#6C727F", fontSize: 14, margin: "4px 0 0 0" }}>
+                          {subcategory.description}
+                        </p>
+                      )}
+                    </div>
+                    <Switch
+                      disabled={!subcategory.is_editable || loading}
+                      onChange={(data) => {
+                        setLoading(true);
+                        handleCategoryPreferenceChange({
+                          data,
+                          subcategory,
+                          setPreferenceData,
+                          suprSendClient,
+                        }).finally(() => setLoading(false));
+                      }}
+                      uncheckedIcon={false}
+                      checkedIcon={false}
+                      height={20}
+                      width={40}
+                      onColor="#2563EB"
+                      checked={subcategory.preference === PreferenceOptions.OPT_IN}
+                    />
+                  </div>
 
-                    {subcategory?.channels && subcategory.channels.length > 0 && (
-                      <div className="flex flex-wrap gap-3 mt-4">
-                        {subcategory.channels.map((channel, channelIndex) => {
-                          return (
-                  <Checkbox
-                    key={channelIndex}
-                    value={channel.preference}
-                    title={channel.channel}
-                    disabled={!channel.is_editable || loading}
-                              onClick={() => {
-                                setLoading(true);
-                                handleChannelPreferenceInCategoryChange({
-                                  channel,
-                                  subcategory,
-                                  setPreferenceData,
-                                  suprSendClient,
-                                }).finally(() => setLoading(false));
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-              </div>
-                );
-              })}
-            </div>
+                  {subcategory?.channels && subcategory.channels.length > 0 && (
+                    <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                      {subcategory.channels.map((channel, channelIndex) => (
+                        <Checkbox
+                          key={channelIndex}
+                          value={channel.preference}
+                          title={formatChannelLabel(channel.channel)}
+                          disabled={!channel.is_editable || loading}
+                          onClick={() => {
+                            setLoading(true);
+                            handleChannelPreferenceInCategoryChange({
+                              channel,
+                              subcategory,
+                              setPreferenceData,
+                              suprSendClient,
+                            }).finally(() => setLoading(false));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       })}
-        </div>
+    </div>
   );
 }
 
@@ -305,10 +363,10 @@ const handleOverallChannelPreferenceChange = async ({
       status
     );
   if (resp.status === "error") {
-    showCustomToast(`Failed to update ${channel.channel} preference: ${resp.error.message}`, 'error');
+    showCustomToast(`Failed to update ${formatChannelLabel(channel.channel)} preference: ${resp.error.message}`, 'error');
   } else {
     setPreferenceData({ ...resp.body });
-    showCustomToast(`${channel.channel} preference updated successfully`, 'success');
+    showCustomToast(`${formatChannelLabel(channel.channel)} preference updated successfully`, 'success');
   }
 };
 
@@ -316,30 +374,69 @@ function ChannelLevelPreferenceItem({ channel, setPreferenceData }) {
   const suprSendClient = useSuprSendClient();
   const [isActive, setIsActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  const channelKey = (channel.channel || "").toLowerCase();
+  const ChannelIcon = channelKey === "email" ? EmailIconFilled : InboxIconFilled;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border p-6 mb-4">
+    <div
+      style={{
+        border: "1px solid #D9D9D9",
+        borderRadius: 5,
+        padding: "12px 24px",
+        marginBottom: 24,
+        backgroundColor: "#FFF",
+      }}
+    >
       <div
-        className="cursor-pointer"
+        style={{
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+        }}
         onClick={() => setIsActive(!isActive)}
       >
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">
-          {channel.channel}
-        </h3>
-        <p className="text-sm text-gray-600">
-          {channel.is_restricted
-            ? "Allow required notifications only"
-            : "Allow all notifications"}
-        </p>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
+          <ChannelIcon
+            size={20}
+            style={{ flexShrink: 0, marginTop: 2 }}
+          />
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 16, fontWeight: 600, color: "#3D3D3D", margin: 0 }}>
+              {formatChannelLabel(channel.channel)}
+            </p>
+            <p style={{ color: "#6C727F", fontSize: 14, margin: "2px 0 0 0" }}>
+              {channel.is_restricted
+                ? "Allow required notifications only"
+                : "Allow all notifications"}
+            </p>
+          </div>
+        </div>
+        <div style={{ flexShrink: 0 }}>
+          {isActive ? (
+            <ChevronUp size={20} style={{ color: "#3D3D3D" }} aria-hidden />
+          ) : (
+            <ChevronDown size={20} style={{ color: "#3D3D3D" }} aria-hidden />
+          )}
+        </div>
       </div>
       {isActive && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <h4 className="text-base font-semibold text-gray-900 mb-4 pb-2 border-b border-gray-100">
-            {channel.channel} Preferences
-          </h4>
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center mb-2">
+        <div style={{ marginTop: 12, marginLeft: 24 }}>
+          <p
+            style={{
+              color: "#3D3D3D",
+              fontSize: 16,
+              fontWeight: 500,
+              marginTop: 12,
+              borderBottom: "1px solid #E8E8E8",
+            }}
+          >
+            {formatChannelLabel(channel.channel)} Preferences
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center" }}>
                 <input
                   type="radio"
                   name={`all-${channel.channel}`}
@@ -356,21 +453,17 @@ function ChannelLevelPreferenceItem({ channel, setPreferenceData }) {
                       suprSendClient,
                     }).finally(() => setLoading(false));
                   }}
-                  className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
-                <label
-                  htmlFor={`all-${channel.channel}`}
-                  className="ml-3 text-sm font-medium text-gray-900"
-                >
+                <label htmlFor={`all-${channel.channel}`} style={{ marginLeft: 12 }}>
                   All
                 </label>
               </div>
-              <p className="text-sm text-gray-600 ml-7">
+              <p style={{ color: "#6C727F", fontSize: 14, marginLeft: 22 }}>
                 Allow All Notifications, except the ones that I have turned off
               </p>
             </div>
             <div>
-              <div className="flex items-center mb-2">
+              <div style={{ display: "flex", alignItems: "center" }}>
                 <input
                   type="radio"
                   name={`required-${channel.channel}`}
@@ -387,16 +480,12 @@ function ChannelLevelPreferenceItem({ channel, setPreferenceData }) {
                       suprSendClient,
                     }).finally(() => setLoading(false));
                   }}
-                  className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
-                <label
-                  htmlFor={`required-${channel.channel}`}
-                  className="ml-3 text-sm font-medium text-gray-900"
-                >
+                <label htmlFor={`required-${channel.channel}`} style={{ marginLeft: 12 }}>
                   Required
                 </label>
               </div>
-              <p className="text-sm text-gray-600 ml-7">
+              <p style={{ color: "#6C727F", fontSize: 14, marginLeft: 22 }}>
                 Allow only important notifications related to account and
                 security settings
               </p>
@@ -411,85 +500,101 @@ function ChannelLevelPreferenceItem({ channel, setPreferenceData }) {
 function ChannelLevelPreferences({ preferenceData, setPreferenceData }) {
   const channels = preferenceData?.channel_preferences || [];
 
-  if (!channels.length) {
   return (
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <p className="text-gray-500 text-center py-8">No channel preferences available</p>
+    <div>
+      <div
+        style={{
+          backgroundColor: "#FAFBFB",
+          paddingTop: 12,
+          paddingBottom: 12,
+          marginBottom: 18,
+        }}
+      >
+        <p style={{ fontSize: 18, fontWeight: 600, color: "#3D3D3D", margin: 0 }}>
+          What notifications to allow for channel?
+        </p>
       </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {channels.map((channel, index) => {
-        return (
+      <div>
+        {channels.length ? (
+          channels.map((channel, index) => (
             <ChannelLevelPreferenceItem
               key={index}
               channel={channel}
               setPreferenceData={setPreferenceData}
             />
-        );
-      })}
+          ))
+        ) : (
+          <p style={{ color: "#6C727F" }}>No channel preferences available</p>
+        )}
+      </div>
     </div>
   );
 }
 
-// -------------- Custom Checkbox Component -------------- //
+// -------------- Channel pill (SuprSend preference style: pill + blue checkmark when selected) -------------- //
 
 function Checkbox({ title, value, onClick, disabled }) {
   const selected = value === PreferenceOptions.OPT_IN;
 
   return (
     <div
-      className={`
-        inline-flex items-center px-3 py-1.5 rounded-lg border transition-colors
-        ${selected 
-          ? 'border-blue-500 bg-blue-50' 
-          : 'border-gray-300 bg-white hover:border-gray-400'
-        }
-        ${disabled 
-          ? 'opacity-60 cursor-not-allowed' 
-          : 'cursor-pointer'
-        }
-      `}
+      style={{
+        border: selected ? "1px solid #2563EB" : "1px solid #D9D9D9",
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 16px 6px 8px",
+        borderRadius: 30,
+        cursor: disabled ? "not-allowed" : "pointer",
+        backgroundColor: selected ? "#EFF4FF" : "#FFF",
+      }}
       onClick={disabled ? undefined : onClick}
     >
-      <CheckboxIcon selected={selected} disabled={disabled} />
-      <span className={`ml-2 text-sm font-medium ${
-        selected ? 'text-blue-700' : 'text-gray-700'
-      }`}>
+      <ChannelCheckmark selected={selected} disabled={disabled} />
+      <span
+        style={{
+          marginLeft: 8,
+          color: selected ? "#3D3D3D" : "#6C727F",
+          fontWeight: 500,
+          fontSize: 14,
+        }}
+      >
         {title}
       </span>
-  </div>
-);
+    </div>
+  );
 }
 
-function CheckboxIcon({ selected, disabled }) {
+function ChannelCheckmark({ selected, disabled }) {
+  const bgColor = selected
+    ? disabled
+      ? "#BDCFF8"
+      : "#2563EB"
+    : "#FFF";
+  const borderColor = selected ? "#2563EB" : "#D9D9D9";
+
   return (
     <div
-      className={`
-        w-5 h-5 border-2 rounded flex items-center justify-center flex-shrink-0 transition-colors
-        ${selected 
-          ? disabled
-            ? 'border-blue-400 bg-blue-200'
-            : 'border-blue-600 bg-blue-600'
-          : disabled
-          ? 'border-gray-300 bg-gray-100'
-          : 'border-gray-400 bg-white'
-        }
-      `}
+      style={{
+        width: 20,
+        height: 20,
+        borderRadius: "50%",
+        border: `1.5px solid ${borderColor}`,
+        backgroundColor: bgColor,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
     >
       {selected && (
-        <svg
-          className={`w-3.5 h-3.5 ${disabled ? 'text-blue-600' : 'text-white'}`}
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2.5"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path d="M5 13l4 4L19 7" />
+        <svg width="12" height="10" viewBox="0 0 12 10" fill="none" style={{ display: "block" }}>
+          <path
+            d="M1 5L4.5 8.5L11 1.5"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       )}
     </div>
@@ -498,12 +603,13 @@ function CheckboxIcon({ selected, disabled }) {
 
 // -------------- Main Component -------------- //
 
-function NotificationPreferences() {
+function NotificationPreferences({ headerHeightPx: headerHeightPxProp } = {}) {
   const suprSendClient = useSuprSendClient();
   const { authenticatedUser } = useAuthenticateUser();
   const [preferenceData, setPreferenceData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const headerHeightPx = headerHeightPxProp ?? 72;
 
   useEffect(() => {
     if (!authenticatedUser || !suprSendClient) return;
@@ -565,127 +671,80 @@ function NotificationPreferences() {
     };
   }, [authenticatedUser, suprSendClient]);
 
+  // Layout consistent with Task Board: same background, header bar, and content padding
+  const pageHeader = (
+    <div
+      className="bg-white border-b border-gray-200 flex items-center px-4 sm:px-6 lg:px-8 flex-shrink-0"
+      style={{ minHeight: headerHeightPx }}
+    >
+      <h1 style={{ fontSize: 18, fontWeight: 600, color: "#3D3D3D", margin: 0 }}>
+        Notification Preferences
+      </h1>
+    </div>
+  );
+
+  const contentArea = (children) => (
+    <div className="flex-1 overflow-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8">
+        {children}
+      </div>
+    </div>
+  );
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white shadow-sm border-b">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
-              <p className="text-gray-600">Loading your preferences...</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="bg-white rounded-lg shadow-sm border p-8">
-              <div className="text-center py-8">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="mt-4 text-gray-600">Loading preferences...</p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="min-h-full flex flex-col bg-gray-50">
+        {pageHeader}
+        {contentArea(<p style={{ color: "#6C727F" }}>Loading...</p>)}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white shadow-sm border-b">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
-              <p className="text-gray-600">Error loading preferences</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="bg-white rounded-lg shadow-sm border p-8">
-              <div className="text-center py-8">
-                <p className="text-red-600 mb-4">Error: {error}</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="min-h-full flex flex-col bg-gray-50">
+        {pageHeader}
+        {contentArea(
+          <>
+            <p style={{ color: "#6C727F", marginBottom: 12 }}>Error: {error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer border-0"
+            >
+              Retry
+            </button>
+          </>
+        )}
       </div>
     );
   }
 
   if (!preferenceData) {
-  return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white shadow-sm border-b">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
-              <p className="text-gray-600">No preferences available</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="bg-white rounded-lg shadow-sm border p-8">
-              <p className="text-gray-500 text-center py-8">
-                No notification preferences are currently available.
-              </p>
-            </div>
-          </div>
-        </div>
+    return (
+      <div className="min-h-full flex flex-col bg-gray-50">
+        {pageHeader}
+        {contentArea(
+          <p style={{ color: "#6C727F" }}>No notification preferences are currently available.</p>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="py-4">
-            <h1 className="text-2xl font-bold text-gray-900">Notification Preferences</h1>
-            <p className="text-gray-600">Manage your notification settings</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="space-y-6">
-            {/* Category Preferences Section */}
-            <div>
-              <div className="mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 mb-1">Category Preferences</h2>
-                <p className="text-sm text-gray-600">Choose which types of notifications you want to receive</p>
-              </div>
-            <NotificationCategoryPreferences
-              preferenceData={preferenceData}
-              setPreferenceData={setPreferenceData}
-            />
-        </div>
-
-            {/* Channel Preferences Section */}
-            <div>
-              <div className="mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 mb-1">Channel Preferences</h2>
-                <p className="text-sm text-gray-600">Configure notification delivery channels</p>
-          </div>
-            <ChannelLevelPreferences
-              preferenceData={preferenceData}
-              setPreferenceData={setPreferenceData}
-            />
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-full flex flex-col bg-gray-50">
+      {pageHeader}
+      {contentArea(
+        <>
+          <NotificationCategoryPreferences
+            preferenceData={preferenceData}
+            setPreferenceData={setPreferenceData}
+          />
+          <ChannelLevelPreferences
+            preferenceData={preferenceData}
+            setPreferenceData={setPreferenceData}
+          />
+        </>
+      )}
     </div>
   );
 }

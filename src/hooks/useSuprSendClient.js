@@ -232,6 +232,7 @@ export const useSuprSendClient = () => {
       const eventProperties = {
         task_title: taskData.title,
         task_id: taskData.id,
+        task_description: taskData.description ?? '',
         task_priority: taskData.priority,
         task_status: taskData.status,
         task_url: taskUrl,  // Add task_url for email template

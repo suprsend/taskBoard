@@ -45,11 +45,12 @@ export const validateProductionConfig = () => {
       );
     }
     
-    // Check that backend API URL is configured
-    if (!process.env.REACT_APP_API_URL) {
+    // Check that backend API URL is configured (only warn in development)
+    // In production, we use relative paths, so REACT_APP_API_URL is not needed
+    if (!process.env.REACT_APP_API_URL && process.env.NODE_ENV !== 'production') {
       warnings.push(
         'REACT_APP_API_URL is not configured. ' +
-        'Frontend needs backend API URL to function properly.'
+        'Frontend needs backend API URL to function properly in development.'
       );
     }
   }

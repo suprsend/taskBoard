@@ -15,15 +15,31 @@ module.exports = async (req, res) => {
 
   // Only allow POST
   if (req.method !== 'POST') {
+    // Set CORS headers for error responses too
+    Object.entries(getCorsHeaders()).forEach(([key, value]) => {
+      res.setHeader(key, value);
+    });
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    validateEnv();
+    // Validate environment variables first
+    try {
+      validateEnv();
+    } catch (envError) {
+      console.error('Environment validation failed:', envError.message);
+      return res.status(500).json({ 
+        error: `Configuration error: ${envError.message}. Please check Vercel environment variables.` 
+      });
+    }
 
     const { email, userName = 'User' } = req.body;
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      // Set CORS headers for error responses
+      Object.entries(getCorsHeaders()).forEach(([key, value]) => {
+        res.setHeader(key, value);
+      });
       return res.status(400).json({ error: 'Valid email is required' });
     }
 
@@ -64,6 +80,10 @@ module.exports = async (req, res) => {
 
     if (!response.ok) {
       const errorData = responseText ? JSON.parse(responseText) : {};
+      // Set CORS headers for error responses
+      Object.entries(getCorsHeaders()).forEach(([key, value]) => {
+        res.setHeader(key, value);
+      });
       return res.status(response.status).json({
         error: errorData.message || errorData.error || `Failed to send OTP: ${response.status}`
       });
@@ -85,6 +105,13 @@ module.exports = async (req, res) => {
 
   } catch (error) {
     console.error('Error sending OTP:', error);
-    res.status(500).json({ error: 'Failed to send OTP. Please try again.' });
+    // Set CORS headers for error responses
+    Object.entries(getCorsHeaders()).forEach(([key, value]) => {
+      res.setHeader(key, value);
+    });
+    res.status(500).json({ 
+      error: error.message || 'Failed to send OTP. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
